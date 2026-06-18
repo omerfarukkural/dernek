@@ -1,246 +1,448 @@
 <?php
 /**
- * AI içerik üretim pipeline: Perplexity → Gemini → Claude
+ * AI Content Pipeline Class
+ *
+ * Orchestrates: Perplexity research → Gemini generation → Claude refinement
+ * then creates social_post CPT entries and triggers Telegram approval.
+ *
+ * @package Dernek
  */
-if (!defined('ABSPATH')) exit;
+
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
 
 class Dernek_Content_Pipeline {
 
-    const CHAR_LIMITS = [
-        'threads'   => 500,
-        'facebook'  => 2000,
-        'instagram' => 2200,
-        'twitter'   => 280,
-    ];
+	const PERPLEXITY_API_URL = 'https://api.perplexity.ai/chat/completions';
+	const GEMINI_API_URL     = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+	const CLAUDE_API_URL     = 'https://api.anthropic.com/v1/messages';
+	const CLAUDE_MODEL       = 'claude-sonnet-4-6';
+	const PERPLEXITY_MODEL   = 'sonar-pro';
 
-    const TONE_GUIDELINES = [
-        'personal' => 'Samimi, düşündürücü, kişisel deneyim odaklı. Türkçe. Ömer Faruk Kuralın sesini yansıt. Birinci şahıs kullan.',
-        'dernek'   => 'Kurumsal, güvenilir, toplumu bilgilendirici. Türkçe. Sivil toplum ve dernek dili. Çoğul birinci şahıs kullan.',
-        'viral'    => 'Dikkat çekici hook ile başla, trend odaklı, soru sor, emoji kullan, call-to-action ile bitir. Türkçe.',
-    ];
+	/** Platform character limits */
+	const CHAR_LIMITS = [
+		'threads'   => 500,
+		'facebook'  => 2000,
+		'instagram' => 2200,
+		'twitter'   => 280,
+	];
 
-    public static function register_routes() {
-        register_rest_route('dernek/v1', '/pipeline/run', [
-            'methods'             => 'POST',
-            'callback'            => [self::class, 'run_pipeline'],
-            'permission_callback' => ['Dernek_Social_Scheduler', 'auth'],
-        ]);
-        register_rest_route('dernek/v1', '/pipeline/research', [
-            'methods'             => 'POST',
-            'callback'            => [self::class, 'research_only'],
-            'permission_callback' => ['Dernek_Social_Scheduler', 'auth'],
-        ]);
-    }
+	/** Account-specific tone guidelines */
+	const TONE_GUIDELINES = [
+		'personal' => 'Samimi, düşündürücü, kişisel deneyim odaklı. Türkçe. Ömer Faruk\'un sesini yansıt.',
+		'dernek'   => 'Kurumsal, güvenilir, toplumu bilgilendirici. Türkçe. Sivil toplum dili.',
+		'viral'    => 'Dikkat çekici, viral hook ile başla, trend\'e uygun, emoji ile zenginleştir. Türkçe.',
+	];
 
-    public static function run_pipeline(\WP_REST_Request $request) {
-        $data         = $request->get_json_params();
-        $topic        = sanitize_text_field($data['topic'] ?? '');
-        $account_type = sanitize_text_field($data['account_type'] ?? 'personal');
-        $platforms    = array_map('sanitize_text_field', $data['platforms'] ?? ['threads']);
+	/** @var self|null */
+	private static $instance = null;
 
-        if (!$topic) {
-            return new \WP_Error('missing_topic', 'Konu gerekli', ['status' => 400]);
-        }
+	/** Get singleton instance. */
+	public static function get_instance(): self {
+		if ( null === self::$instance ) {
+			self::$instance = new self();
+		}
+		return self::$instance;
+	}
 
-        $result = self::create_pipeline($topic, $platforms, $account_type);
+	/** Constructor — register REST endpoints. */
+	private function __construct() {
+		add_action( 'rest_api_init', [ $this, 'register_rest_routes' ] );
+	}
 
-        if (is_wp_error($result)) {
-            return $result;
-        }
+	/** Register REST routes for pipeline invocation. */
+	public function register_rest_routes(): void {
+		register_rest_route( 'dernek/v1', '/pipeline/run', [
+			'methods'             => 'POST',
+			'callback'            => [ $this, 'rest_run_pipeline' ],
+			'permission_callback' => static function () {
+				return current_user_can( 'manage_options' );
+			},
+			'args' => [
+				'topic'        => [
+					'required'          => true,
+					'type'              => 'string',
+					'sanitize_callback' => 'sanitize_text_field',
+				],
+				'account_type' => [
+					'required' => true,
+					'type'     => 'string',
+					'enum'     => [ 'personal', 'dernek', 'viral' ],
+				],
+				'platforms'    => [
+					'required' => true,
+					'type'     => 'array',
+					'items'    => [
+						'type' => 'string',
+						'enum' => [ 'threads', 'facebook', 'instagram', 'twitter' ],
+					],
+				],
+				'scheduled_at' => [
+					'required' => false,
+					'type'     => 'string',
+				],
+			],
+		] );
+	}
 
-        return rest_ensure_response($result);
-    }
+	/** REST: Run the full pipeline. */
+	public function rest_run_pipeline( WP_REST_Request $request ): WP_REST_Response {
+		$topic        = $request->get_param( 'topic' );
+		$account_type = $request->get_param( 'account_type' );
+		$platforms    = (array) $request->get_param( 'platforms' );
+		$scheduled_at = $request->get_param( 'scheduled_at' );
 
-    public static function research_only(\WP_REST_Request $request) {
-        $data         = $request->get_json_params();
-        $topic        = sanitize_text_field($data['topic'] ?? '');
-        $account_type = sanitize_text_field($data['account_type'] ?? 'personal');
+		$result = $this->create_pipeline( $topic, $platforms, $account_type, $scheduled_at );
 
-        $research = self::research_with_perplexity($topic, $account_type);
-        if (is_wp_error($research)) {
-            return $research;
-        }
+		if ( is_wp_error( $result ) ) {
+			return new WP_REST_Response( [ 'error' => $result->get_error_message() ], 500 );
+		}
 
-        return rest_ensure_response(['research' => $research]);
-    }
+		return new WP_REST_Response( $result, 201 );
+	}
 
-    public static function create_pipeline($topic, $platforms, $account_type) {
-        // Adım 1: Perplexity araştırması
-        $research = self::research_with_perplexity($topic, $account_type);
-        if (is_wp_error($research)) {
-            return $research;
-        }
+	// -------------------------------------------------------------------------
+	// Step 1: Research with Perplexity
+	// -------------------------------------------------------------------------
 
-        $created_posts = [];
+	/**
+	 * Research a topic using Perplexity sonar-pro.
+	 *
+	 * @param string $topic
+	 * @param string $account_type personal|dernek|viral
+	 * @return array|\WP_Error Decoded JSON response.
+	 */
+	public function research_with_perplexity( string $topic, string $account_type ): array|WP_Error {
+		$api_key = get_option( 'perplexity_api_key' );
+		if ( empty( $api_key ) ) {
+			return new WP_Error( 'perplexity_config', 'Perplexity API anahtarı tanımlı değil.' );
+		}
 
-        foreach ($platforms as $platform) {
-            $limit = self::CHAR_LIMITS[$platform] ?? 500;
+		$tone       = self::TONE_GUIDELINES[ $account_type ] ?? self::TONE_GUIDELINES['personal'];
+		$system_msg = "Sen bir sosyal medya araştırmacısısın. Verilen konuyu araştır ve yapılandırılmış JSON çıktısı üret. Hedef: {$tone}";
 
-            // Adım 2: Gemini içerik üretimi
-            $generated = self::generate_with_gemini($research, $platform, $account_type, $limit);
-            if (is_wp_error($generated)) {
-                $created_posts[] = ['platform' => $platform, 'error' => $generated->get_error_message()];
-                continue;
-            }
+		$user_msg = "Konu: {$topic}\n\n"
+			. "Lütfen şu başlıkları içeren JSON formatında araştırma yap:\n"
+			. "{\n"
+			. "  \"topic\": \"{$topic}\",\n"
+			. "  \"summary\": \"Konunun 2-3 cümlelik özeti\",\n"
+			. "  \"key_points\": [\"nokta1\", \"nokta2\", \"nokta3\"],\n"
+			. "  \"statistics\": [\"istatistik1\", \"istatistik2\"],\n"
+			. "  \"sources\": [\"kaynak1\", \"kaynak2\"],\n"
+			. "  \"hashtags\": [\"#hashtag1\", \"#hashtag2\"],\n"
+			. "  \"trending_angle\": \"Viral potansiyeli olan açı\",\n"
+			. "  \"local_relevance\": \"Türkiye veya sivil toplum için önemi\"\n"
+			. "}";
 
-            // Adım 3: Claude ile son rötuş
-            $polished = self::refine_with_claude($generated, self::TONE_GUIDELINES[$account_type]);
-            $final_content = is_wp_error($polished) ? $generated : $polished;
+		$response = wp_remote_post( self::PERPLEXITY_API_URL, [
+			'timeout' => 60,
+			'headers' => [
+				'Content-Type'  => 'application/json',
+				'Authorization' => 'Bearer ' . $api_key,
+			],
+			'body' => wp_json_encode( [
+				'model'    => self::PERPLEXITY_MODEL,
+				'messages' => [
+					[ 'role' => 'system', 'content' => $system_msg ],
+					[ 'role' => 'user',   'content' => $user_msg ],
+				],
+				'temperature'        => 0.2,
+				'max_tokens'         => 2000,
+				'return_citations'   => true,
+				'search_domain_filter' => [],
+				'return_images'      => false,
+				'search_recency_filter' => 'week',
+			] ),
+		] );
 
-            // Adım 4: WordPress'e kaydet ve Telegram onayı gönder
-            $post_id = wp_insert_post([
-                'post_type'    => Dernek_Social_Scheduler::CPT,
-                'post_title'   => "$topic — $platform — $account_type",
-                'post_content' => sanitize_textarea_field($final_content),
-                'post_status'  => 'publish',
-            ]);
+		if ( is_wp_error( $response ) ) {
+			return $response;
+		}
 
-            if (!is_wp_error($post_id)) {
-                update_post_meta($post_id, 'platform',           $platform);
-                update_post_meta($post_id, 'account_type',       $account_type);
-                update_post_meta($post_id, 'post_status_dernek', 'pending_approval');
-                update_post_meta($post_id, 'ai_tool_used',       'pipeline:perplexity+gemini+claude');
+		$code = wp_remote_retrieve_response_code( $response );
+		$body = json_decode( wp_remote_retrieve_body( $response ), true );
 
-                Dernek_Social_Scheduler::send_telegram_approval($post_id, $final_content);
+		if ( $code !== 200 ) {
+			return new WP_Error( 'perplexity_api_error', $body['error']['message'] ?? "Perplexity HTTP {$code}" );
+		}
 
-                // Drive'a araştırmayı kaydet
-                Dernek_NotebookLM_Bridge::save_research_to_drive(
-                    "# $topic\n\n## Araştırma\n$research\n\n## Üretilen İçerik ($platform)\n$final_content",
-                    $topic,
-                    'pipeline'
-                );
+		$content = $body['choices'][0]['message']['content'] ?? '';
 
-                $created_posts[] = [
-                    'platform'   => $platform,
-                    'post_id'    => $post_id,
-                    'status'     => 'pending_approval',
-                    'preview'    => substr($final_content, 0, 150),
-                ];
-            }
-        }
+		// Extract JSON from markdown code block if present
+		if ( preg_match( '/```(?:json)?\s*([\s\S]+?)\s*```/', $content, $m ) ) {
+			$content = $m[1];
+		}
 
-        return [
-            'success'       => true,
-            'topic'         => $topic,
-            'account_type'  => $account_type,
-            'posts_created' => count($created_posts),
-            'posts'         => $created_posts,
-        ];
-    }
+		$research = json_decode( $content, true );
 
-    public static function research_with_perplexity($topic, $account_type) {
-        $api_key = get_option('dernek_perplexity_api_key', '');
-        if (!$api_key) {
-            return new \WP_Error('no_perplexity_key', 'Perplexity API anahtarı eksik');
-        }
+		if ( json_last_error() !== JSON_ERROR_NONE ) {
+			// Return raw content wrapped in array if JSON parsing fails
+			$research = [
+				'topic'            => $topic,
+				'summary'          => $content,
+				'key_points'       => [],
+				'statistics'       => [],
+				'sources'          => $body['citations'] ?? [],
+				'hashtags'         => [],
+				'trending_angle'   => '',
+				'local_relevance'  => '',
+				'raw'              => $content,
+			];
+		}
 
-        $system_prompt = "Sen Türkçe sosyal medya içerik araştırmacısısın. Kısa, özlü ve güncel bilgi ver.";
-        $user_prompt   = "Bu konu hakkında Türkçe sosyal medya içeriği oluşturmak için araştırma yap. " .
-                         "Hesap türü: $account_type. " .
-                         "Konu: $topic. " .
-                         "En önemli 5 nokta, güncel trend ve önerilen açı ile yanıt ver.";
+		// Attach Perplexity citations if available
+		if ( ! empty( $body['citations'] ) && empty( $research['sources'] ) ) {
+			$research['sources'] = $body['citations'];
+		}
 
-        $response = wp_remote_post('https://api.perplexity.ai/chat/completions', [
-            'body'    => json_encode([
-                'model'    => 'sonar-pro',
-                'messages' => [
-                    ['role' => 'system', 'content' => $system_prompt],
-                    ['role' => 'user',   'content' => $user_prompt],
-                ],
-                'max_tokens' => 800,
-            ]),
-            'headers' => [
-                'Authorization' => "Bearer $api_key",
-                'Content-Type'  => 'application/json',
-            ],
-            'timeout' => 30,
-        ]);
+		return $research;
+	}
 
-        if (is_wp_error($response)) return $response;
+	// -------------------------------------------------------------------------
+	// Step 2: Generate content with Gemini
+	// -------------------------------------------------------------------------
 
-        $body = json_decode(wp_remote_retrieve_body($response), true);
-        $code = wp_remote_retrieve_response_code($response);
+	/**
+	 * Generate platform-specific content variants using Gemini 2.0 Flash.
+	 *
+	 * @param array  $research     Output from research_with_perplexity().
+	 * @param string $platform     threads|facebook|instagram|twitter
+	 * @param string $account_type personal|dernek|viral
+	 * @return array|\WP_Error Array with 'variants' key containing 3 content options.
+	 */
+	public function generate_with_gemini( array $research, string $platform, string $account_type ): array|WP_Error {
+		$api_key = get_option( 'gemini_api_key' );
+		if ( empty( $api_key ) ) {
+			return new WP_Error( 'gemini_config', 'Gemini API anahtarı tanımlı değil.' );
+		}
 
-        if ($code >= 400) {
-            return new \WP_Error('perplexity_error', $body['error']['message'] ?? "HTTP $code");
-        }
+		$char_limit = self::CHAR_LIMITS[ $platform ] ?? 500;
+		$tone       = self::TONE_GUIDELINES[ $account_type ] ?? self::TONE_GUIDELINES['personal'];
 
-        return $body['choices'][0]['message']['content'] ?? '';
-    }
+		$platform_hints = [
+			'threads'   => 'Kısa, düşündürücü, konuşma tarzında. Thread zinciri önerisi yapabilirsin.',
+			'facebook'  => 'Daha uzun, hikaye anlatıcı, bağlantı paylaşımına uygun.',
+			'instagram' => 'Görsel odaklı, caption formatında, emoji ile zenginleştirilmiş, hashtag listesi sona eklenmiş.',
+			'twitter'   => 'Ultra kısa, güçlü hook, maksimum etki için sıkıştırılmış.',
+		];
 
-    public static function generate_with_gemini($research, $platform, $account_type, $char_limit) {
-        $api_key = get_option('dernek_gemini_api_key', '');
-        if (!$api_key) {
-            return new \WP_Error('no_gemini_key', 'Gemini API anahtarı eksik');
-        }
+		$hint     = $platform_hints[ $platform ] ?? '';
+		$research_json = wp_json_encode( $research, JSON_UNESCAPED_UNICODE );
 
-        $tone    = self::TONE_GUIDELINES[$account_type];
-        $prompt  = "Aşağıdaki araştırmayı kullanarak $platform için Türkçe sosyal medya gönderisi yaz.\n\n";
-        $prompt .= "Ton: $tone\n";
-        $prompt .= "Karakter limiti: $char_limit\n";
-        $prompt .= "Platform: $platform\n\n";
-        $prompt .= "Araştırma:\n$research\n\n";
-        $prompt .= "Sadece gönderi metnini yaz, başka açıklama ekleme.";
+		$prompt = "Aşağıdaki araştırmayı kullanarak {$platform} için sosyal medya içeriği üret.\n\n"
+			. "TON: {$tone}\n"
+			. "PLATFORM İPUCU: {$hint}\n"
+			. "KARAKTER LİMİTİ: Maksimum {$char_limit} karakter\n\n"
+			. "ARAŞTIRMA:\n{$research_json}\n\n"
+			. "3 farklı içerik varyantı üret. JSON formatında döndür:\n"
+			. "{\n"
+			. "  \"platform\": \"{$platform}\",\n"
+			. "  \"account_type\": \"{$account_type}\",\n"
+			. "  \"variants\": [\n"
+			. "    {\"id\": 1, \"content\": \"...\", \"hook\": \"İlk cümle\", \"char_count\": 0},\n"
+			. "    {\"id\": 2, \"content\": \"...\", \"hook\": \"İlk cümle\", \"char_count\": 0},\n"
+			. "    {\"id\": 3, \"content\": \"...\", \"hook\": \"İlk cümle\", \"char_count\": 0}\n"
+			. "  ]\n"
+			. "}";
 
-        $response = wp_remote_post(
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=$api_key",
-            [
-                'body'    => json_encode([
-                    'contents' => [['parts' => [['text' => $prompt]]]],
-                    'generationConfig' => ['maxOutputTokens' => 600, 'temperature' => 0.7],
-                ]),
-                'headers' => ['Content-Type' => 'application/json'],
-                'timeout' => 30,
-            ]
-        );
+		$url      = self::GEMINI_API_URL . '?key=' . $api_key;
+		$response = wp_remote_post( $url, [
+			'timeout' => 60,
+			'headers' => [ 'Content-Type' => 'application/json' ],
+			'body'    => wp_json_encode( [
+				'contents' => [
+					[
+						'role'  => 'user',
+						'parts' => [ [ 'text' => $prompt ] ],
+					],
+				],
+				'generationConfig' => [
+					'temperature'     => 0.8,
+					'maxOutputTokens' => 3000,
+					'responseMimeType' => 'application/json',
+				],
+			] ),
+		] );
 
-        if (is_wp_error($response)) return $response;
+		if ( is_wp_error( $response ) ) {
+			return $response;
+		}
 
-        $body = json_decode(wp_remote_retrieve_body($response), true);
-        $code = wp_remote_retrieve_response_code($response);
+		$code = wp_remote_retrieve_response_code( $response );
+		$body = json_decode( wp_remote_retrieve_body( $response ), true );
 
-        if ($code >= 400) {
-            return new \WP_Error('gemini_error', $body['error']['message'] ?? "HTTP $code");
-        }
+		if ( $code !== 200 ) {
+			$msg = $body['error']['message'] ?? "Gemini HTTP {$code}";
+			return new WP_Error( 'gemini_api_error', $msg );
+		}
 
-        $text = $body['candidates'][0]['content']['parts'][0]['text'] ?? '';
-        return substr($text, 0, $char_limit);
-    }
+		$raw_text = $body['candidates'][0]['content']['parts'][0]['text'] ?? '';
 
-    public static function refine_with_claude($content, $tone_guidelines) {
-        $api_key = get_option('dernek_claude_api_key', '');
-        if (!$api_key) {
-            return new \WP_Error('no_claude_key', 'Claude API anahtarı eksik');
-        }
+		if ( preg_match( '/```(?:json)?\s*([\s\S]+?)\s*```/', $raw_text, $m ) ) {
+			$raw_text = $m[1];
+		}
 
-        $prompt = "Bu sosyal medya gönderisini aşağıdaki ton kurallarına göre iyileştir. " .
-                  "Sadece iyileştirilmiş metni yaz.\n\n" .
-                  "Ton: $tone_guidelines\n\n" .
-                  "Metin:\n$content";
+		$result = json_decode( $raw_text, true );
 
-        $response = wp_remote_post('https://api.anthropic.com/v1/messages', [
-            'body'    => json_encode([
-                'model'      => 'claude-haiku-4-5-20251001',
-                'max_tokens' => 600,
-                'messages'   => [['role' => 'user', 'content' => $prompt]],
-            ]),
-            'headers' => [
-                'x-api-key'         => $api_key,
-                'anthropic-version' => '2023-06-01',
-                'Content-Type'      => 'application/json',
-            ],
-            'timeout' => 30,
-        ]);
+		if ( json_last_error() !== JSON_ERROR_NONE || empty( $result['variants'] ) ) {
+			return new WP_Error( 'gemini_parse_error', 'Gemini yanıtı JSON olarak ayrıştırılamadı.' );
+		}
 
-        if (is_wp_error($response)) return $response;
+		return $result;
+	}
 
-        $body = json_decode(wp_remote_retrieve_body($response), true);
-        $code = wp_remote_retrieve_response_code($response);
+	// -------------------------------------------------------------------------
+	// Step 3: Refine with Claude
+	// -------------------------------------------------------------------------
 
-        if ($code >= 400) {
-            return new \WP_Error('claude_error', $body['error']['message'] ?? "HTTP $code");
-        }
+	/**
+	 * Polish and refine content using Claude claude-sonnet-4-6.
+	 *
+	 * @param string $content         Raw content to refine.
+	 * @param string $tone_guidelines Account-specific tone guidelines.
+	 * @return string|\WP_Error Refined content string.
+	 */
+	public function refine_with_claude( string $content, string $tone_guidelines ): string|WP_Error {
+		$api_key = get_option( 'claude_api_key' );
+		if ( empty( $api_key ) ) {
+			return new WP_Error( 'claude_config', 'Claude API anahtarı tanımlı değil.' );
+		}
 
-        return $body['content'][0]['text'] ?? $content;
-    }
+		$system = "Sen bir sosyal medya editörüsün. Verilen içeriği ton kılavuzuna göre iyileştir. "
+			. "Sadece iyileştirilmiş içeriği döndür, açıklama ekleme. Türkçe yaz.";
+
+		$user = "TON KILAVUZU: {$tone_guidelines}\n\n"
+			. "İÇERİK:\n{$content}\n\n"
+			. "Bu içeriği ton kılavuzuna göre iyileştir. "
+			. "Doğallık, akıcılık ve özgünlük için düzenle. "
+			. "Karakter sayısını korumaya çalış. Sadece iyileştirilmiş metni döndür.";
+
+		$response = wp_remote_post( self::CLAUDE_API_URL, [
+			'timeout' => 45,
+			'headers' => [
+				'Content-Type'      => 'application/json',
+				'x-api-key'         => $api_key,
+				'anthropic-version' => '2023-06-01',
+			],
+			'body' => wp_json_encode( [
+				'model'      => self::CLAUDE_MODEL,
+				'max_tokens' => 1024,
+				'system'     => $system,
+				'messages'   => [
+					[ 'role' => 'user', 'content' => $user ],
+				],
+			] ),
+		] );
+
+		if ( is_wp_error( $response ) ) {
+			return $response;
+		}
+
+		$code = wp_remote_retrieve_response_code( $response );
+		$body = json_decode( wp_remote_retrieve_body( $response ), true );
+
+		if ( $code !== 200 ) {
+			$msg = $body['error']['message'] ?? "Claude HTTP {$code}";
+			return new WP_Error( 'claude_api_error', $msg );
+		}
+
+		return trim( $body['content'][0]['text'] ?? $content );
+	}
+
+	// -------------------------------------------------------------------------
+	// Master Pipeline
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Run the full AI pipeline: Research → Generate → Refine → Create CPT entries.
+	 *
+	 * @param string      $topic        Topic to research.
+	 * @param string[]    $platforms    Array of platform slugs.
+	 * @param string      $account_type personal|dernek|viral
+	 * @param string|null $scheduled_at ISO 8601 datetime or null for +1 hour.
+	 * @return array|\WP_Error Array of created post IDs keyed by platform.
+	 */
+	public function create_pipeline( string $topic, array $platforms, string $account_type, ?string $scheduled_at = null ): array|WP_Error {
+		$scheduled_at = $scheduled_at ?: wp_date( 'c', strtotime( '+1 hour' ) );
+		$tone         = self::TONE_GUIDELINES[ $account_type ] ?? self::TONE_GUIDELINES['personal'];
+
+		// --- Step 1: Research ---
+		$research = $this->research_with_perplexity( $topic, $account_type );
+		if ( is_wp_error( $research ) ) {
+			return $research;
+		}
+
+		$created_posts = [];
+		$errors        = [];
+
+		foreach ( $platforms as $platform ) {
+			$platform = sanitize_key( $platform );
+			if ( ! array_key_exists( $platform, self::CHAR_LIMITS ) ) {
+				continue;
+			}
+
+			// --- Step 2: Generate ---
+			$generated = $this->generate_with_gemini( $research, $platform, $account_type );
+			if ( is_wp_error( $generated ) ) {
+				$errors[ $platform ] = $generated->get_error_message();
+				continue;
+			}
+
+			// Use the first variant as primary content
+			$best_variant = $generated['variants'][0]['content'] ?? '';
+			if ( empty( $best_variant ) ) {
+				$errors[ $platform ] = 'Gemini içerik varyantı boş döndü.';
+				continue;
+			}
+
+			// --- Step 3: Refine ---
+			$refined = $this->refine_with_claude( $best_variant, $tone );
+			if ( is_wp_error( $refined ) ) {
+				// Use unrefined content as fallback
+				$refined = $best_variant;
+			}
+
+			// Enforce character limit
+			$char_limit = self::CHAR_LIMITS[ $platform ];
+			if ( mb_strlen( $refined ) > $char_limit ) {
+				$refined = mb_substr( $refined, 0, $char_limit );
+			}
+
+			// --- Step 4: Create CPT entry + Telegram approval ---
+			$scheduler = Dernek_Social_Scheduler::get_instance();
+			$post_id   = $scheduler->schedule_post( [
+				'title'        => mb_substr( $topic, 0, 60 ) . " [{$platform}]",
+				'content'      => $refined,
+				'platform'     => $platform,
+				'account_type' => $account_type,
+				'scheduled_at' => $scheduled_at,
+				'ai_tool_used' => 'perplexity+gemini+claude',
+			] );
+
+			if ( is_wp_error( $post_id ) ) {
+				$errors[ $platform ] = $post_id->get_error_message();
+				continue;
+			}
+
+			$created_posts[ $platform ] = [
+				'post_id'    => $post_id,
+				'platform'   => $platform,
+				'char_count' => mb_strlen( $refined ),
+				'variants'   => $generated['variants'] ?? [],
+			];
+
+			// Save all variants as post meta for future editing
+			update_post_meta( $post_id, 'content_variants', wp_json_encode( $generated['variants'] ) );
+			update_post_meta( $post_id, 'research_data',    wp_json_encode( $research ) );
+		}
+
+		return [
+			'topic'         => $topic,
+			'account_type'  => $account_type,
+			'scheduled_at'  => $scheduled_at,
+			'created_posts' => $created_posts,
+			'errors'        => $errors,
+		];
+	}
 }
