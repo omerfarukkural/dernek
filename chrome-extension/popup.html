@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <title>AI Proje Takipci</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; width: 320px; padding: 16px; background: #f8f9fa; }
+    h2 { font-size: 15px; color: #1a73e8; margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
+    label { font-size: 12px; color: #555; display: block; margin-top: 10px; margin-bottom: 4px; }
+    input, select { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; }
+    button { width: 100%; padding: 10px; margin-top: 10px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; transition: opacity 0.2s; }
+    button:hover { opacity: 0.85; }
+    .btn-primary { background: #1a73e8; color: white; }
+    .btn-secondary { background: #e8f0fe; color: #1a73e8; margin-top: 6px; }
+    .status { margin-top: 10px; font-size: 12px; color: #43a047; text-align: center; min-height: 18px; }
+    .section { background: white; border-radius: 8px; padding: 12px; margin-bottom: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+    .tab { display: flex; gap: 6px; margin-bottom: 12px; }
+    .tab-btn { flex: 1; padding: 7px; border: 1px solid #ddd; border-radius: 6px; background: white; cursor: pointer; font-size: 12px; font-weight: 500; }
+    .tab-btn.active { background: #1a73e8; color: white; border-color: #1a73e8; }
+    .tool-badge { display: inline-block; background: #e8f0fe; color: #1a73e8; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <h2>&#x1F916; AI Proje Takipci</h2>
+  <div id="tool-info" style="margin-bottom:10px; font-size:12px; color:#666;"></div>
+  <div class="tab">
+    <button class="tab-btn active" id="tab-log-btn" onclick="showTab('log')">Kayit</button>
+    <button class="tab-btn" id="tab-settings-btn" onclick="showTab('settings')">Ayarlar</button>
+  </div>
+
+  <div id="tab-log">
+    <div class="section">
+      <label>Aktif Proje</label>
+      <select id="projectSelect">
+        <option value="Genel">Genel</option>
+      </select>
+      <label>Yeni Proje Adi (opsiyonel)</label>
+      <input type="text" id="newProject" placeholder="Yeni proje adi girin...">
+      <button class="btn-primary" onclick="manualLog()">&#x1F4E4; Simdi Kaydet</button>
+      <button class="btn-secondary" onclick="loadProjects()">&#x1F504; Projeleri Yenile</button>
+    </div>
+    <div id="status" class="status"></div>
+  </div>
+
+  <div id="tab-settings" style="display:none">
+    <div class="section">
+      <label>Apps Script Web App URL</label>
+      <input type="url" id="webAppUrl" placeholder="https://script.google.com/macros/s/.../exec">
+      <label>Webhook Secret Token</label>
+      <input type="password" id="webhookSecret" placeholder="Gizli token">
+      <button class="btn-primary" onclick="saveSettings()">&#x1F4BE; Kaydet</button>
+    </div>
+    <div id="settings-status" class="status"></div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

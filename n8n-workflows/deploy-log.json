@@ -1,0 +1,38 @@
+{
+  "name": "Deploy Log Automation",
+  "nodes": [
+    {
+      "id": "1",
+      "name": "Webhook Deploy Log",
+      "type": "n8n-nodes-base.webhook",
+      "parameters": { "path": "deploy-log", "httpMethod": "POST", "responseMode": "onReceived" },
+      "position": [250, 300]
+    },
+    {
+      "id": "2",
+      "name": "Append to Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "parameters": {
+        "operation": "append",
+        "documentId": { "mode": "id", "value": "={{ $env.SHEETS_ID }}" },
+        "sheetName": "Hosting & Deploy Log",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Tarih": "={{ $now }}",
+            "Alan Adi": "={{ $json.domain }}",
+            "Islem": "={{ $json.action }}",
+            "Arac": "={{ $json.tool }}",
+            "Durum": "={{ $json.status }}",
+            "URL": "={{ $json.url }}",
+            "Notlar": "={{ $json.notes }}"
+          }
+        }
+      },
+      "position": [450, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Deploy Log": { "main": [[{ "node": "Append to Sheets", "type": "main", "index": 0 }]] }
+  }
+}

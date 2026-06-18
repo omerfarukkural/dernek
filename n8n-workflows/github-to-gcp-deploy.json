@@ -1,0 +1,45 @@
+{
+  "name": "GitHub Push to GCP Deploy",
+  "nodes": [
+    {
+      "id": "1",
+      "name": "GitHub Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "parameters": { "path": "github-gcp-deploy", "httpMethod": "POST", "responseMode": "onReceived" },
+      "position": [250, 300]
+    },
+    {
+      "id": "2",
+      "name": "Trigger GCP Cloud Build",
+      "type": "n8n-nodes-base.httpRequest",
+      "parameters": {
+        "url": "https://cloudbuild.googleapis.com/v1/projects/{{ $env.GCP_PROJECT_ID }}/triggers/{{ $env.GCP_TRIGGER_ID }}:run",
+        "method": "POST",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "sendBody": true,
+        "bodyParameters": { "parameters": [{ "name": "branchName", "value": "={{ $json.ref.replace('refs/heads/', '') }}" }] }
+      },
+      "position": [450, 300]
+    },
+    {
+      "id": "3",
+      "name": "Log Deploy to Sheets",
+      "type": "n8n-nodes-base.httpRequest",
+      "parameters": {
+        "url": "={{ $env.APPS_SCRIPT_URL }}",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"token\": \"{{ $env.WEBHOOK_SECRET }}\",\n  \"type\": \"deploy\",\n  \"domain\": \"{{ $json.repository.name }}\",\n  \"action\": \"GitHub Push Deploy\",\n  \"tool\": \"github\",\n  \"status\": \"Triggered\",\n  \"url\": \"{{ $json.repository.html_url }}\"\n}"
+      },
+      "position": [650, 300]
+    }
+  ],
+  "connections": {
+    "GitHub Webhook": { "main": [[{ "node": "Trigger GCP Cloud Build", "type": "main", "index": 0 }]] },
+    "Trigger GCP Cloud Build": { "main": [[{ "node": "Log Deploy to Sheets", "type": "main", "index": 0 }]] }
+  }
+}

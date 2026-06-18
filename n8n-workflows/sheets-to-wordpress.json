@@ -1,0 +1,56 @@
+{
+  "name": "Sheets to WordPress bitebimuv.org",
+  "nodes": [
+    {
+      "id": "1",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "parameters": { "rule": { "interval": [{ "field": "hours", "hoursInterval": 1 }] } },
+      "position": [250, 300]
+    },
+    {
+      "id": "2",
+      "name": "Read Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "parameters": {
+        "operation": "read",
+        "documentId": { "mode": "id", "value": "={{ $env.SHEETS_ID }}" },
+        "sheetName": "Projeler",
+        "dataLocationOnSheet": { "values": { "rangeDefinition": "specifyRange", "range": "A2:L100" } }
+      },
+      "position": [450, 300]
+    },
+    {
+      "id": "3",
+      "name": "Filter Yayina Hazir",
+      "type": "n8n-nodes-base.filter",
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true },
+          "conditions": [{ "id": "1", "leftValue": "={{ $json['Asama'] }}", "rightValue": "Yayina Hazir", "operator": { "type": "string", "operation": "equals" } }]
+        }
+      },
+      "position": [650, 300]
+    },
+    {
+      "id": "4",
+      "name": "Create WordPress Post",
+      "type": "n8n-nodes-base.wordpress",
+      "parameters": {
+        "resource": "post",
+        "operation": "create",
+        "additionalFields": {
+          "title": "={{ $json['Proje Adi'] }}",
+          "content": "Arac: {{ $json['Birincil Arac'] }}\nToken: {{ $json['Toplam Token'] }}\nMaliyet: {{ $json['Toplam Maliyet USD'] }} USD",
+          "status": "draft"
+        }
+      },
+      "position": [850, 300]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": { "main": [[{ "node": "Read Google Sheets", "type": "main", "index": 0 }]] },
+    "Read Google Sheets": { "main": [[{ "node": "Filter Yayina Hazir", "type": "main", "index": 0 }]] },
+    "Filter Yayina Hazir": { "main": [[{ "node": "Create WordPress Post", "type": "main", "index": 0 }]] }
+  }
+}
