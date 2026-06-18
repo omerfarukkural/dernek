@@ -1,0 +1,101 @@
+{
+  "name": "Telegram Onay → Yayınla",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "telegram-approved",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Telegram Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.item.json;\nconst callback = body.callback_query;\n\nif (!callback) {\n  return [{ json: { skip: true } }];\n}\n\nconst data = callback.data || '';\nconst match = data.match(/^(approve|reject|delay)_(\\d+)$/);\n\nif (!match) {\n  return [{ json: { skip: true } }];\n}\n\nreturn [{\n  json: {\n    action: match[1],\n    post_id: match[2],\n    callback_query_id: callback.id,\n    chat_id: callback.message.chat.id,\n    message_id: callback.message.message_id\n  }\n}];"
+      },
+      "id": "parse-callback",
+      "name": "Callback Ayrıştır",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [{"value1": "={{ $json.skip }}", "value2": true}]
+        }
+      },
+      "id": "check-skip",
+      "name": "Skip Kontrolü",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://bitebimuv.org/wp-json/dernek/v1/social-post/{{ $json.post_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "X-Dernek-Token", "value": "={{ $env.DERNEK_WEBHOOK_SECRET }}"},
+            {"name": "Content-Type", "value": "application/json"}
+          ]
+        },
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "={\n  \"status\": \"{{ $json.action === 'approve' ? 'approved' : ($json.action === 'delay' ? 'approved' : 'rejected') }}\"\n}",
+        "options": {}
+      },
+      "id": "update-wp",
+      "name": "WP Durumu Güncelle",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [900, 180]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APPS_SCRIPT_URL }}",
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "={\n  \"token\": \"{{ $env.DERNEK_WEBHOOK_SECRET }}\",\n  \"action\": \"updatePostStatus\",\n  \"post_id\": \"{{ $('Callback Ayrıştır').item.json.post_id }}\",\n  \"status\": \"{{ $('Callback Ayrıştır').item.json.action === 'approve' ? 'onaylandi' : 'reddedildi' }}\"\n}",
+        "options": {}
+      },
+      "id": "sheets-update",
+      "name": "Sheets Güncelle",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1120, 180]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\"ok\": true}"
+      },
+      "id": "respond",
+      "name": "Yanıt",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1340, 300]
+    }
+  ],
+  "connections": {
+    "Telegram Webhook": {"main": [[{"node": "Callback Ayrıştır", "type": "main", "index": 0}]]},
+    "Callback Ayrıştır": {"main": [[{"node": "Skip Kontrolü", "type": "main", "index": 0}]]},
+    "Skip Kontrolü": {
+      "main": [
+        [{"node": "Yanıt", "type": "main", "index": 0}],
+        [{"node": "WP Durumu Güncelle", "type": "main", "index": 0}]
+      ]
+    },
+    "WP Durumu Güncelle": {"main": [[{"node": "Sheets Güncelle", "type": "main", "index": 0}]]},
+    "Sheets Güncelle": {"main": [[{"node": "Yanıt", "type": "main", "index": 0}]]}
+  },
+  "settings": {"executionOrder": "v1"}
+}

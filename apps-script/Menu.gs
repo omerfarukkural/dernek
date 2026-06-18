@@ -1,12 +1,22 @@
 function onOpen() {
-  SpreadsheetApp.getUi()
-    .createMenu('AI Asistan')
+  const ui = SpreadsheetApp.getUi();
+  ui.createMenu('AI Asistan')
     .addItem('Sheets Kurulumunu Calistir', 'setupSheets')
+    .addItem('Sosyal Medya Sayfalarini Kur', 'setupSocialSheets')
     .addItem('Maliyet Raporunu Guncelle', 'updateCostDashboard')
     .addSeparator()
+    .addItem('Trend Konulari Goster', 'showTrends')
     .addItem('Drive Ana Klasorunu Ac', 'openBaseFolder')
     .addItem('Ayarlari Goster', 'showSettings')
     .addToUi();
+}
+
+function showTrends() {
+  const topics = getTrendingTopics();
+  const msg = topics.length
+    ? topics.map((t, i) => `${i+1}. ${t.topic} (${t.category})`).join('\n')
+    : 'Trend bulunamadi. Trendler sayfasina konu ekleyin.';
+  SpreadsheetApp.getUi().alert('Top 5 Trend', msg, SpreadsheetApp.getUi().ButtonSet.OK);
 }
 
 function openBaseFolder() {
