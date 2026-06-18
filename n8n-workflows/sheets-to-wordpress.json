@@ -1,62 +1,55 @@
 {
-  "name": "Sheets Projeler -> WordPress Draft",
+  "name": "Sheets to WordPress bitebimuv.org",
+  "meta": { "instanceId": "dernek-system" },
   "nodes": [
     {
-      "parameters": {
-        "rule": { "interval": [{ "field": "hours", "hoursInterval": 1 }] }
-      },
-      "id": "schedule-trigger",
-      "name": "Her Saat Tetikle",
+      "id": "1", "name": "Saatlik Tetikleyici",
       "type": "n8n-nodes-base.scheduleTrigger",
-      "typeVersion": 1.1,
-      "position": [240, 300]
+      "parameters": { "rule": { "interval": [{ "field": "hours", "hoursInterval": 1 }] } },
+      "position": [250, 300]
     },
     {
-      "parameters": {
-        "operation": "readAllRows",
-        "documentId": { "__rl": true, "mode": "id", "value": "={{ $env.SHEETS_ID }}" },
-        "sheetName": { "__rl": true, "mode": "name", "value": "Projeler" }
-      },
-      "id": "read-sheets",
-      "name": "Projeler Sayfasini Oku",
+      "id": "2", "name": "Sheets Oku",
       "type": "n8n-nodes-base.googleSheets",
-      "typeVersion": 4.2,
-      "position": [460, 300],
-      "credentials": { "googleSheetsOAuth2Api": { "id": "google-sheets-cred", "name": "Google Sheets" } }
+      "parameters": {
+        "operation": "read",
+        "documentId": { "mode": "id", "value": "1tDehgecGUQEQZ1H5n6F2XxfXZw30sRhYfWe1grQjc9Y" },
+        "sheetName": "Projeler",
+        "dataLocationOnSheet": { "values": { "rangeDefinition": "specifyRange", "range": "A2:L200" } }
+      },
+      "position": [450, 300]
     },
     {
+      "id": "3", "name": "Yayina Hazir Filtre",
+      "type": "n8n-nodes-base.filter",
       "parameters": {
         "conditions": {
-          "string": [{ "value1": "={{ $json['Asama'] }}", "operation": "equals", "value2": "Yayina Hazir" }]
+          "conditions": [{ "id": "1", "leftValue": "={{ $json['Asama'] }}", "rightValue": "Yayina Hazir", "operator": { "type": "string", "operation": "equals" } }]
         }
       },
-      "id": "filter-ready",
-      "name": "Yayina Hazir Filtrele",
-      "type": "n8n-nodes-base.filter",
-      "typeVersion": 1,
-      "position": [680, 300]
+      "position": [650, 300]
     },
     {
-      "parameters": {
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpBasicAuth",
-        "requestMethod": "POST",
-        "url": "={{ $env.WP_URL }}/wp-json/wp/v2/posts",
-        "jsonParameters": true,
-        "bodyParametersJson": "={{ JSON.stringify({ title: $json['Proje Adi'], status: 'draft', content: '<p>Arac: ' + $json['Birincil Arac'] + '</p><p>Asama: ' + $json['Asama'] + '</p><p>Drive: ' + ($json['Drive Klasor Linki'] || '') + '</p>', meta: { ai_tool: $json['Birincil Arac'], ai_device: $json['Cihaz'], ai_stage: $json['Asama'], drive_link: $json['Drive Klasor Linki'] || '' } }) }}"
-      },
-      "id": "create-wp-post",
-      "name": "WordPress Draft Olustur",
+      "id": "4", "name": "WP Post Olustur",
       "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [900, 300],
-      "credentials": { "httpBasicAuth": { "id": "wp-basic-auth", "name": "WordPress Basic Auth" } }
+      "parameters": {
+        "url": "https://bitebimuv.org/wp-json/royal-mcp/v1/mcp",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [
+          { "name": "X-Royal-MCP-API-Key", "value": "RIEN2eethmYMvthOOXpsormJxDj7cpWc" },
+          { "name": "Content-Type", "value": "application/json" }
+        ]},
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"jsonrpc\": \"2.0\",\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"wp_create_post\",\n    \"arguments\": {\n      \"title\": \"{{ $json['Proje Adi'] }}\",\n      \"content\": \"Arac: {{ $json['Birincil Arac'] }}\\nToken: {{ $json['Toplam Token'] }}\\nMaliyet: {{ $json['Toplam Maliyet USD'] }} USD\",\n      \"status\": \"draft\",\n      \"type\": \"post\"\n    }\n  },\n  \"id\": 1\n}"
+      },
+      "position": [850, 300]
     }
   ],
   "connections": {
-    "Her Saat Tetikle": { "main": [[{ "node": "Projeler Sayfasini Oku", "type": "main", "index": 0 }]] },
-    "Projeler Sayfasini Oku": { "main": [[{ "node": "Yayina Hazir Filtrele", "type": "main", "index": 0 }]] },
-    "Yayina Hazir Filtrele": { "main": [[{ "node": "WordPress Draft Olustur", "type": "main", "index": 0 }]] }
-  },
-  "settings": { "executionOrder": "v1" }
+    "Saatlik Tetikleyici": { "main": [[{ "node": "Sheets Oku" }]] },
+    "Sheets Oku": { "main": [[{ "node": "Yayina Hazir Filtre" }]] },
+    "Yayina Hazir Filtre": { "main": [[{ "node": "WP Post Olustur" }]] }
+  }
 }
