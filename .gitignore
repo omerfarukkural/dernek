@@ -17,3 +17,4 @@ npm-debug.log
 
 # Logs
 *.log
+wordpress-plugin/setup-credentials.sh
