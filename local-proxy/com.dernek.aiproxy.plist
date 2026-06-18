@@ -19,10 +19,5 @@
   <string>/Users/YOUR_USERNAME/Library/Logs/dernek-ai-proxy.log</string>
   <key>StandardErrorPath</key>
   <string>/Users/YOUR_USERNAME/Library/Logs/dernek-ai-proxy-error.log</string>
-  <key>EnvironmentVariables</key>
-  <dict>
-    <key>NODE_ENV</key>
-    <string>production</string>
-  </dict>
 </dict>
 </plist>

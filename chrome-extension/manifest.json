@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "AI Proje Takipci",
   "version": "1.0.0",
-  "description": "Claude, Gemini, Perplexity konusmalarini otomatik olarak Google Sheets e kaydeder.",
+  "description": "Claude, Gemini ve Perplexity konusmalarini otomatik olarak Google Sheets'e kaydeder.",
   "permissions": ["storage", "activeTab", "scripting"],
   "host_permissions": [
     "https://claude.ai/*",
@@ -14,7 +14,11 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://claude.ai/*", "https://gemini.google.com/*", "https://www.perplexity.ai/*"],
+      "matches": [
+        "https://claude.ai/*",
+        "https://gemini.google.com/*",
+        "https://www.perplexity.ai/*"
+      ],
       "js": ["content.js"],
       "run_at": "document_idle"
     }

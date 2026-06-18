@@ -12,18 +12,18 @@ function getOrCreateBaseFolder() {
   return folder;
 }
 
+function getOrCreateSubFolder(parent, name) {
+  const existing = parent.getFoldersByName(name);
+  return existing.hasNext() ? existing.next() : parent.createFolder(name);
+}
+
 function createProjectFolder(projectName, tool) {
   const base = getOrCreateBaseFolder();
-  const toolName = (tool || 'Genel').charAt(0).toUpperCase() + (tool || 'Genel').slice(1);
-  let toolFolder;
-  const toolFolders = base.getFoldersByName(toolName);
-  toolFolder = toolFolders.hasNext() ? toolFolders.next() : base.createFolder(toolName);
-  let projectFolder;
-  const pFolders = toolFolder.getFoldersByName(projectName);
-  projectFolder = pFolders.hasNext() ? pFolders.next() : toolFolder.createFolder(projectName);
-  ['Araştırma', 'Taslaklar', 'Final', 'API_Ciktilari'].forEach(sub => {
-    const subs = projectFolder.getFoldersByName(sub);
-    if (!subs.hasNext()) projectFolder.createFolder(sub);
+  const toolName = tool ? tool.charAt(0).toUpperCase() + tool.slice(1) : 'Genel';
+  const toolFolder = getOrCreateSubFolder(base, toolName);
+  const projectFolder = getOrCreateSubFolder(toolFolder, projectName);
+  ['Arastirma', 'Taslaklar', 'Final', 'API_Ciktilari'].forEach(sub => {
+    getOrCreateSubFolder(projectFolder, sub);
   });
   return projectFolder.getUrl();
 }
@@ -32,26 +32,32 @@ function saveToDrive(data) {
   if (!data.project) return '';
   try {
     const base = getOrCreateBaseFolder();
-    const toolName = (data.tool || 'Genel').charAt(0).toUpperCase() + (data.tool || 'Genel').slice(1);
-    let toolFolder;
-    const tf = base.getFoldersByName(toolName);
-    toolFolder = tf.hasNext() ? tf.next() : base.createFolder(toolName);
-    let projectFolder;
-    const pf = toolFolder.getFoldersByName(data.project);
-    projectFolder = pf.hasNext() ? pf.next() : toolFolder.createFolder(data.project);
-    let apiFolder;
-    const af = projectFolder.getFoldersByName('API_Ciktilari');
-    apiFolder = af.hasNext() ? af.next() : projectFolder.createFolder('API_Ciktilari');
+    const toolName = data.tool ? data.tool.charAt(0).toUpperCase() + data.tool.slice(1) : 'Genel';
+    const toolFolder = getOrCreateSubFolder(base, toolName);
+    const projectFolder = getOrCreateSubFolder(toolFolder, data.project);
+    const apiFolder = getOrCreateSubFolder(projectFolder, 'API_Ciktilari');
     const date = Utilities.formatDate(new Date(), 'Europe/Istanbul', 'yyyy-MM-dd_HH-mm');
     const fileName = date + '-' + (data.tool || 'ai') + '-konusma.md';
-    const content = '# ' + data.project + ' — ' + data.tool + ' Konusması\n\n' +
-      '**Tarih:** ' + new Date().toLocaleString('tr-TR') + '\n' +
-      '**Cihaz:** ' + (data.device || 'Bilinmiyor') + '\n' +
-      '**Arac:** ' + (data.tool || 'Bilinmiyor') + '\n' +
-      '**Token:** ' + (data.tokens_used || 0) + '\n\n' +
-      '## Prompt\n\n' + (data.prompt_summary || '') + '\n\n' +
-      '## Yanit\n\n' + (data.response_summary || '') + '\n\n' +
-      '## Tam Icerik\n\n' + (data.full_content || '');
+    const content = [
+      '# ' + data.project + ' — ' + (data.tool || 'AI') + ' Konusmasi',
+      '',
+      '**Tarih:** ' + new Date().toLocaleString('tr-TR'),
+      '**Cihaz:** ' + (data.device || 'Bilinmiyor'),
+      '**Arac:** ' + (data.tool || 'Bilinmiyor'),
+      '**Token:** ' + (data.tokens_used || 0),
+      '',
+      '## Prompt',
+      '',
+      data.prompt_summary || '',
+      '',
+      '## Yanit',
+      '',
+      data.response_summary || '',
+      '',
+      '## Tam Icerik',
+      '',
+      data.full_content || ''
+    ].join('\n');
     const file = apiFolder.createFile(fileName, content, MimeType.PLAIN_TEXT);
     return file.getUrl();
   } catch (e) {
