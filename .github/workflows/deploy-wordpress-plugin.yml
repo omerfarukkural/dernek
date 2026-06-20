@@ -1,0 +1,32 @@
+name: Deploy WordPress Plugin via FTP
+
+on:
+  push:
+    branches:
+      - main
+      - claude/jolly-feynman-dt0epl
+    paths:
+      - 'wordpress-plugin/**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy to Turhost via FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_HOST }}
+          username: ${{ secrets.FTP_USER }}
+          password: ${{ secrets.FTP_PASS }}
+          port: 21
+          protocol: ftp
+          local-dir: ./wordpress-plugin/
+          server-dir: /public_html/wp-content/plugins/dernek-project-sync/
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/node_modules/**
+            **/*.log
