@@ -16,18 +16,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Deploy to Turhost via FTP
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.4
-        with:
-          server: ${{ secrets.FTP_HOST }}
-          username: ${{ secrets.FTP_USER }}
-          password: ${{ secrets.FTP_PASS }}
-          port: 21
-          protocol: ftp
-          local-dir: ./wordpress-plugin/
-          server-dir: /public_html/wp-content/plugins/dernek-project-sync/
-          exclude: |
-            **/.git*
-            **/.git*/**
-            **/node_modules/**
-            **/*.log
+      - name: Install lftp
+        run: sudo apt-get install -y lftp
+
+      - name: Deploy via lftp FTP
+        env:
+          FTP_HOST: ${{ secrets.FTP_HOST }}
+          FTP_USER: ${{ secrets.FTP_USER }}
+          FTP_PASS: ${{ secrets.FTP_PASS }}
+        run: |
+          lftp -c "
+            set ftp:ssl-allow no;
+            open -u $FTP_USER,$FTP_PASS $FTP_HOST;
+            mirror --reverse --delete --verbose \
+              ./wordpress-plugin/ \
+              /public_html/wp-content/plugins/dernek-project-sync/;
+            bye
+          "
