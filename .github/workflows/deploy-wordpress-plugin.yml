@@ -15,6 +15,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Check secrets
+        run: |
+          if [ -z "${{ secrets.FTP_HOST }}" ]; then echo "ERROR: FTP_HOST secret is missing!"; exit 1; fi
+          if [ -z "${{ secrets.FTP_USER }}" ]; then echo "ERROR: FTP_USER secret is missing!"; exit 1; fi
+          if [ -z "${{ secrets.FTP_PASS }}" ]; then echo "ERROR: FTP_PASS secret is missing!"; exit 1; fi
+          echo "All secrets are set. FTP_HOST=${{ secrets.FTP_HOST }}"
+
       - name: Deploy to Turhost via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
