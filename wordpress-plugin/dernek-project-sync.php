@@ -226,4 +226,3 @@ add_filter('royal_mcp_writable_options', function($options) {
     $options[] = 'dernek_social_accounts';
     return $options;
 });
-# v1.1.0
