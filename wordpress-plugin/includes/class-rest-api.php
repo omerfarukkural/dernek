@@ -10,6 +10,7 @@ class Dernek_REST_API {
         register_rest_route('dernek/v1', '/setup',   ['methods' => 'POST', 'callback' => [self::class, 'handle_setup'],  'permission_callback' => [self::class, 'auth_setup']]);
         register_rest_route('dernek/v1', '/pipeline/run',      ['methods' => 'POST', 'callback' => ['Dernek_Content_Pipeline', 'run_pipeline'],  'permission_callback' => [self::class, 'auth']]);
         register_rest_route('dernek/v1', '/pipeline/research', ['methods' => 'POST', 'callback' => ['Dernek_Content_Pipeline', 'research_only'], 'permission_callback' => [self::class, 'auth']]);
+        register_rest_route('dernek/v1', '/github-deploy',     ['methods' => 'POST', 'callback' => [self::class, 'handle_github_deploy'], 'permission_callback' => [self::class, 'auth']]);
     }
 
     public static function auth(WP_REST_Request $r) {
@@ -23,6 +24,59 @@ class Dernek_REST_API {
         if (empty($token)) return false;
         $stored = get_option('dernek_api_secret', '');
         return ($stored === '' || hash_equals($stored, (string) $token) || hash_equals('571632', (string) $token));
+    }
+
+    public static function handle_github_deploy(WP_REST_Request $r) {
+        $d      = $r->get_json_params();
+        $branch = sanitize_text_field($d['branch'] ?? 'main');
+        $repo   = 'omerfarukkural/dernek';
+        $base   = 'wordpress-plugin/';
+        $target = WP_PLUGIN_DIR . '/dernek-project-sync/';
+
+        $files = [
+            'dernek-project-sync.php',
+            'includes/class-rest-api.php',
+            'includes/class-post-type.php',
+            'includes/class-admin-widget.php',
+            'includes/class-social-scheduler.php',
+            'includes/class-content-pipeline.php',
+            'includes/class-notebooklm-bridge.php',
+            'public/shortcode.php',
+        ];
+
+        $updated = [];
+        $errors  = [];
+
+        foreach ($files as $file) {
+            $url      = "https://raw.githubusercontent.com/{$repo}/{$branch}/{$base}{$file}";
+            $response = wp_remote_get($url, ['timeout' => 30]);
+
+            if (is_wp_error($response) || wp_remote_retrieve_response_code($response) !== 200) {
+                $errors[] = $file;
+                continue;
+            }
+
+            $content  = wp_remote_retrieve_body($response);
+            $dest     = $target . $file;
+            $dir      = dirname($dest);
+
+            if (!is_dir($dir)) {
+                wp_mkdir_p($dir);
+            }
+
+            if (file_put_contents($dest, $content) !== false) {
+                $updated[] = $file;
+            } else {
+                $errors[] = $file . ' (write failed)';
+            }
+        }
+
+        return rest_ensure_response([
+            'success' => empty($errors),
+            'updated' => $updated,
+            'errors'  => $errors,
+            'branch'  => $branch,
+        ]);
     }
 
     public static function handle_setup(WP_REST_Request $r) {

@@ -1,4 +1,4 @@
-name: Deploy WordPress Plugin via FTP
+name: Deploy WordPress Plugin via GitHub Pull
 
 on:
   push:
@@ -13,23 +13,20 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install lftp
-        run: sudo apt-get install -y lftp
-
-      - name: Deploy via lftp FTP
-        env:
-          FTP_HOST: ${{ secrets.FTP_HOST }}
-          FTP_USER: ${{ secrets.FTP_USER }}
-          FTP_PASS: ${{ secrets.FTP_PASS }}
+      - name: Trigger WordPress to pull latest plugin files
         run: |
-          lftp -c "
-            set ftp:ssl-allow no;
-            open -u $FTP_USER,$FTP_PASS $FTP_HOST;
-            mirror --reverse --delete --verbose \
-              ./wordpress-plugin/ \
-              /public_html/wp-content/plugins/dernek-project-sync/;
-            bye
-          "
+          curl -s -X POST \
+            -H "Content-Type: application/json" \
+            -H "X-Dernek-Token: ${{ secrets.DERNEK_API_SECRET }}" \
+            -d "{\"branch\":\"${{ github.ref_name }}\"}" \
+            https://bitebimuv.org/wp-json/dernek/v1/github-deploy \
+            | tee /tmp/deploy-response.json
+
+          if grep -q '"success":true' /tmp/deploy-response.json; then
+            echo "Deploy successful!"
+            cat /tmp/deploy-response.json
+          else
+            echo "Deploy failed!"
+            cat /tmp/deploy-response.json
+            exit 1
+          fi
