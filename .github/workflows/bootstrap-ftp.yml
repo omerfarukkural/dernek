@@ -10,46 +10,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Upload plugin files via cPanel UAPI
-        run: |
-          HOST="${{ secrets.FTP_HOST }}"
-          USER="${{ secrets.FTP_USER }}"
-          PASS="${{ secrets.FTP_PASS }}"
-          BASE_DIR="/public_html/wp-content/plugins/dernek-project-sync"
-
-          upload_file() {
-            local src="$1"
-            local dest_dir="$2"
-            local filename=$(basename "$src")
-            local content=$(cat "$src")
-
-            echo "Uploading: $src -> $dest_dir/$filename"
-            response=$(curl -sk -u "$USER:$PASS" \
-              "https://$HOST:2083/execute/Fileman/save_file_content" \
-              --data-urlencode "dir=$dest_dir" \
-              --data-urlencode "filename=$filename" \
-              --data-urlencode "content=$content")
-            echo "$response"
-            if echo "$response" | grep -q '"status":1'; then
-              echo "OK: $filename"
-            else
-              echo "FAILED: $filename"
-              return 1
-            fi
-          }
-
-          # Upload main file
-          upload_file "wordpress-plugin/dernek-project-sync.php" "$BASE_DIR"
-
-          # Upload includes
-          upload_file "wordpress-plugin/includes/class-rest-api.php"         "$BASE_DIR/includes"
-          upload_file "wordpress-plugin/includes/class-post-type.php"         "$BASE_DIR/includes"
-          upload_file "wordpress-plugin/includes/class-admin-widget.php"      "$BASE_DIR/includes"
-          upload_file "wordpress-plugin/includes/class-social-scheduler.php"  "$BASE_DIR/includes"
-          upload_file "wordpress-plugin/includes/class-content-pipeline.php"  "$BASE_DIR/includes"
-          upload_file "wordpress-plugin/includes/class-notebooklm-bridge.php" "$BASE_DIR/includes"
-
-          # Upload public
-          upload_file "wordpress-plugin/public/shortcode.php" "$BASE_DIR/public"
-
-          echo "All files uploaded!"
+      - name: Upload plugin files via SFTP
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SFTP_HOST }}
+          username: ${{ secrets.SFTP_USERNAME }}
+          password: ${{ secrets.SFTP_PASSWORD }}
+          source: "wordpress-plugin/"
+          target: ${{ secrets.REMOTE_PATH }}
+          strip_components: 1
