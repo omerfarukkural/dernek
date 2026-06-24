@@ -8,27 +8,32 @@ class Dernek_REST_API {
         register_rest_route('dernek/v1', '/projects',['methods' => 'GET',  'callback' => [self::class, 'get_projects'],  'permission_callback' => '__return_true']);
         register_rest_route('dernek/v1', '/deploy',  ['methods' => 'POST', 'callback' => [self::class, 'handle_deploy'], 'permission_callback' => [self::class, 'auth']]);
         register_rest_route('dernek/v1', '/setup',   ['methods' => 'POST', 'callback' => [self::class, 'handle_setup'],  'permission_callback' => [self::class, 'auth_setup']]);
-        register_rest_route('dernek/v1', '/pipeline/run',      ['methods' => 'POST', 'callback' => ['Dernek_Content_Pipeline', 'run_pipeline'],  'permission_callback' => [self::class, 'auth']]);
-        register_rest_route('dernek/v1', '/pipeline/research', ['methods' => 'POST', 'callback' => ['Dernek_Content_Pipeline', 'research_only'], 'permission_callback' => [self::class, 'auth']]);
+        // /pipeline/* routes are registered by Dernek_Content_Pipeline itself
         register_rest_route('dernek/v1', '/github-deploy',     ['methods' => 'POST', 'callback' => [self::class, 'handle_github_deploy'], 'permission_callback' => [self::class, 'auth']]);
     }
 
     public static function auth(WP_REST_Request $r) {
         $token  = $r->get_header('X-Dernek-Token') ?: $r->get_param('token');
-        $stored = get_option('dernek_api_secret', '571632');
-        return !empty($token) && hash_equals($stored, (string) $token);
+        $stored = get_option('dernek_api_secret', '');
+        if (empty($stored) || empty($token)) return false;
+        return hash_equals($stored, (string) $token);
     }
 
     public static function auth_setup(WP_REST_Request $r) {
         $token  = $r->get_header('X-Dernek-Token') ?: $r->get_param('token');
         if (empty($token)) return false;
         $stored = get_option('dernek_api_secret', '');
-        return ($stored === '' || hash_equals($stored, (string) $token) || hash_equals('571632', (string) $token));
+        // Allow first-time setup only if no secret is configured yet
+        if ($stored === '') return true;
+        return hash_equals($stored, (string) $token);
     }
 
     public static function handle_github_deploy(WP_REST_Request $r) {
         $d      = $r->get_json_params();
-        $branch = sanitize_text_field($d['branch'] ?? 'main');
+        $raw_branch = sanitize_text_field($d['branch'] ?? 'main');
+        // Whitelist branches to prevent arbitrary ref injection / RCE
+        $allowed_branches = ['main', 'claude/jolly-feynman-dt0epl'];
+        $branch = in_array($raw_branch, $allowed_branches, true) ? $raw_branch : 'main';
         $repo   = 'omerfarukkural/dernek';
         $base   = 'wordpress-plugin/';
         $target = WP_PLUGIN_DIR . '/dernek-project-sync/';
@@ -92,10 +97,18 @@ class Dernek_REST_API {
             'dernek_supabase_url', 'dernek_supabase_key',
         ];
 
+        // Keys that may hold JSON arrays/objects — must not be text-sanitized
+        $json_keys = ['dernek_social_accounts'];
+
         $saved = [];
         foreach ($allowed as $key) {
             if (isset($d[$key])) {
-                update_option($key, sanitize_text_field($d[$key]));
+                if (in_array($key, $json_keys, true)) {
+                    $value = is_array($d[$key]) ? wp_json_encode($d[$key]) : wp_unslash($d[$key]);
+                } else {
+                    $value = sanitize_text_field($d[$key]);
+                }
+                update_option($key, $value);
                 $saved[] = $key;
             }
         }
