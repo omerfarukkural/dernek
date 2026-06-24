@@ -26,6 +26,22 @@ jobs:
 
           headers = {"Authorization": f"cpanel {user}:{token}"}
 
+          def mkdir(parent, name):
+              resp = requests.post(
+                  f"https://{host}:2083/execute/Fileman/mkdir",
+                  headers=headers,
+                  data={"dir": parent, "name": name},
+                  verify=False, timeout=30,
+              )
+              j = resp.json()
+              if j.get("status") == 1:
+                  print(f"📁 created {parent}/{name}")
+              else:
+                  print(f"  mkdir {name}: {j.get('errors')} (may already exist)")
+
+          mkdir(base, "includes")
+          mkdir(base, "public")
+
           files = [
               ("wordpress-plugin/dernek-project-sync.php",                      base),
               ("wordpress-plugin/includes/class-rest-api.php",                  base + "/includes"),
