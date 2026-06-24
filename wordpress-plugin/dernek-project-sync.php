@@ -27,7 +27,8 @@ add_action('init',            ['Dernek_Post_Type',    'register']);
 add_action('init',            ['Dernek_Social_Scheduler', 'register_cpt']);
 add_action('rest_api_init',   ['Dernek_REST_API',     'register_routes']);
 add_action('rest_api_init',   ['Dernek_Social_Scheduler', 'register_routes']);
-add_action('rest_api_init',   ['Dernek_NotebookLM_Bridge', 'register_routes']);
+add_action('rest_api_init',   function() { Dernek_NotebookLM_Bridge::get_instance(); });
+add_action('plugins_loaded',     function() { Dernek_Content_Pipeline::get_instance(); });
 add_action('wp_dashboard_setup', ['Dernek_Admin_Widget', 'add_widget']);
 add_action('admin_menu',      'dernek_admin_menu');
 add_action('dernek_publish_scheduled_posts', ['Dernek_Social_Scheduler', 'publish_due_posts']);
@@ -215,7 +216,10 @@ function dernek_settings_page() {
 }
 
 register_activation_hook(__FILE__,   function() { Dernek_Post_Type::register(); flush_rewrite_rules(); });
-register_deactivation_hook(__FILE__, function() { flush_rewrite_rules(); });
+register_deactivation_hook(__FILE__, function() {
+    wp_clear_scheduled_hook('dernek_publish_scheduled_posts');
+    flush_rewrite_rules();
+});
 
 // Royal MCP allowlist — bu satırlar olmadan Royal MCP bu seçenekleri yazamaz
 add_filter('royal_mcp_writable_options', function($options) {

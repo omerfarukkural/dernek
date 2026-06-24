@@ -82,8 +82,67 @@ class Dernek_Social_Scheduler {
         register_rest_route('dernek/v1', '/telegram-webhook', [
             'methods'             => ['POST', 'GET'],
             'callback'            => [self::class, 'telegram_webhook'],
-            'permission_callback' => '__return_true',
+            'permission_callback' => [self::class, 'verify_telegram_secret'],
         ]);
+    }
+
+    // ─── Singleton ───────────────────────────────────────────────────────────
+
+    /** @var self|null */
+    private static $instance = null;
+
+    public static function get_instance(): self {
+        if (null === self::$instance) {
+            self::$instance = new self();
+        }
+        return self::$instance;
+    }
+
+    /**
+     * Create a social post CPT entry and send Telegram approval.
+     * Accepts a plain array instead of a WP_REST_Request.
+     */
+    public function schedule_post(array $data): int|\WP_Error {
+        if (empty($data['content'])) {
+            return new \WP_Error('missing_content', 'İçerik gerekli');
+        }
+
+        $platform     = sanitize_text_field($data['platform']     ?? 'threads');
+        $account_type = sanitize_text_field($data['account_type'] ?? 'personal');
+        $limit        = self::PLATFORMS[$platform]['limit'] ?? 500;
+        $content      = mb_substr(wp_kses_post($data['content']), 0, $limit);
+
+        // Normalize scheduled_at to MySQL DATETIME
+        $raw_scheduled = $data['scheduled_at'] ?? '';
+        $scheduled_at  = $raw_scheduled ? date('Y-m-d H:i:s', strtotime($raw_scheduled)) : '';
+
+        $post_id = wp_insert_post([
+            'post_type'    => self::CPT,
+            'post_title'   => sanitize_text_field($data['title'] ?? mb_substr(strip_tags($content), 0, 80)),
+            'post_content' => $content,
+            'post_status'  => 'publish',
+        ]);
+
+        if (is_wp_error($post_id)) return $post_id;
+
+        update_post_meta($post_id, 'platform',           $platform);
+        update_post_meta($post_id, 'account_type',       $account_type);
+        update_post_meta($post_id, 'scheduled_at',       $scheduled_at);
+        update_post_meta($post_id, 'post_status_dernek', 'pending_approval');
+        update_post_meta($post_id, 'ai_tool_used',       sanitize_text_field($data['ai_tool_used'] ?? 'pipeline'));
+
+        self::send_telegram_approval($post_id, $content);
+        self::log_to_sheets($post_id, $data, 'pending_approval');
+
+        return $post_id;
+    }
+
+    /** Verify X-Telegram-Bot-Api-Secret-Token header for webhook authenticity. */
+    public static function verify_telegram_secret(\WP_REST_Request $r): bool {
+        $secret = get_option('dernek_api_secret', '');
+        if (empty($secret)) return false;
+        $header = $r->get_header('X-Telegram-Bot-Api-Secret-Token');
+        return !empty($header) && hash_equals($secret, $header);
     }
 
     // ─── REST handlers ───────────────────────────────────────────────────────
@@ -791,7 +850,7 @@ class Dernek_Social_Scheduler {
         $content = !empty($data['content']) ? $data['content'] : get_post_field('post_content', $post_id);
         wp_remote_post($url, [
             'body'    => json_encode([
-                'token'       => get_option('dernek_api_secret', '571632'),
+                'token'       => get_option('dernek_api_secret', ''),
                 'action'      => 'logSocialPost',
                 'post_id'     => $post_id,
                 'account'     => get_post_meta($post_id, 'account_type', true),

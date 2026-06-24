@@ -19,9 +19,9 @@ class Dernek_Admin_Widget {
             printf('<tr><td><a href="%s">%s</a></td><td>%s</td><td>%s</td><td>%s</td></tr>',
                 esc_url(get_edit_post_link($p->ID)), esc_html($p->post_title),
                 esc_html(get_post_meta($p->ID, 'ai_tool', true) ?: '-'),
-                number_format($tok), date_i18n('d.m H:i', strtotime($p->post_modified)));
+                esc_html(number_format($tok)), esc_html(date_i18n('d.m H:i', strtotime($p->post_modified))));
         }
-        echo '<tr style="background:#e8f0fe"><td colspan="2"><strong>Toplam</strong></td><td><strong>' . number_format($total) . '</strong></td><td></td></tr>';
-        echo '</table><p style="margin-top:6px;font-size:11px"><a href="' . admin_url('edit.php?post_type=ai_project') . '">Tum projeler</a></p>';
+        echo '<tr style="background:#e8f0fe"><td colspan="2"><strong>Toplam</strong></td><td><strong>' . esc_html(number_format($total)) . '</strong></td><td></td></tr>';
+        echo '</table><p style="margin-top:6px;font-size:11px"><a href="' . esc_url(admin_url('edit.php?post_type=ai_project')) . '">Tum projeler</a></p>';
     }
 }

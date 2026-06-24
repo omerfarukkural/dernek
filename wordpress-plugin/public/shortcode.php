@@ -18,7 +18,7 @@ add_shortcode('dernek_ai_log', function($atts) {
             esc_attr($bg), esc_html($p->post_title),
             esc_html(get_post_meta($p->ID, 'ai_tool',  true) ?: '-'),
             esc_html(get_post_meta($p->ID, 'ai_stage', true) ?: '-'),
-            number_format((int)get_post_meta($p->ID, 'tokens_used', true)),
+            esc_html(number_format((int)get_post_meta($p->ID, 'tokens_used', true))),
             esc_html(date_i18n('d.m.Y', strtotime($p->post_modified))));
     }
     return $o . '</tbody></table></div>';

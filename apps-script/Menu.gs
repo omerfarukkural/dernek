@@ -14,7 +14,7 @@ function onOpen() {
 function showTrends() {
   const topics = getTrendingTopics();
   const msg = topics.length
-    ? topics.map((t, i) => `${i+1}. ${t.topic} (${t.category})`).join('\n')
+    ? topics.map((t, i) => `${i+1}. ${t.topic} (${t.source})`).join('\n')
     : 'Trend bulunamadi. Trendler sayfasina konu ekleyin.';
   SpreadsheetApp.getUi().alert('Top 5 Trend', msg, SpreadsheetApp.getUi().ButtonSet.OK);
 }

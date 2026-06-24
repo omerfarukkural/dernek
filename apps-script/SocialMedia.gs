@@ -7,7 +7,7 @@
 // ─── Constants ────────────────────────────────────────────────────────────────
 var SOCIAL_SHEET_NAME   = '📱 Sosyal Medya';
 var TRENDS_SHEET_NAME   = '🔥 Trendler';
-var WEBHOOK_SECRET      = '571632';
+// WEBHOOK_SECRET is read from Script Properties at runtime (set via Apps Script UI)
 
 var SOCIAL_HEADERS = [
   'ID', 'Tarih', 'Hesap', 'Platform', 'İçerik Özeti',
@@ -86,12 +86,12 @@ function logSocialPost(data) {
       now,
       data.account        || '',
       data.platform       || '',
-      data.contentSummary || '',
+      data.contentSummary || data.content         || '',
       data.status         || 'Taslak',
       data.approval       || 'Bekliyor',
-      data.publishUrl     || '',
+      data.publishUrl     || data.publish_url     || '',
       data.engagement     || '',
-      data.tool           || 'n8n'
+      data.tool           || data.ai_tool         || 'n8n'
     ];
 
     sheet.appendRow(row);
@@ -256,77 +256,7 @@ function upsertTrend(trend) {
 
 // ─── doPost handler ────────────────────────────────────────────────────────────
 
-/**
- * HTTP POST entry point for Apps Script web app deployment.
- * Routes requests based on the "action" parameter.
- *
- * Supported actions:
- *   logPost         — logSocialPost(data)
- *   updateStatus    — updatePostStatus(postId, status, publishUrl)
- *   getTrends       — getTrendingTopics()
- *   upsertTrend     — upsertTrend(trend)
- *
- * @param {GoogleAppsScript.Events.DoPost} e
- * @return {GoogleAppsScript.Content.TextOutput}
- */
-function doPost(e) {
-  try {
-    // Parse body
-    var body = {};
-    if (e.postData && e.postData.contents) {
-      try {
-        body = JSON.parse(e.postData.contents);
-      } catch (parseErr) {
-        // fall back to parameter map
-        body = e.parameter || {};
-      }
-    } else {
-      body = e.parameter || {};
-    }
-
-    // Validate webhook secret
-    var secret = body.secret || (e.parameter && e.parameter.secret) || '';
-    if (String(secret) !== String(WEBHOOK_SECRET)) {
-      return _jsonResponse({ success: false, error: 'Unauthorized' }, 401);
-    }
-
-    var action = body.action || '';
-    var result;
-
-    switch (action) {
-      case 'logPost':
-        result = logSocialPost(body.data || body);
-        break;
-
-      case 'updateStatus':
-        result = updatePostStatus(body.postId, body.status, body.publishUrl);
-        break;
-
-      case 'getTrends':
-        result = { success: true, trends: getTrendingTopics() };
-        break;
-
-      case 'upsertTrend':
-        result = upsertTrend(body.trend || body);
-        break;
-
-      default:
-        result = { success: false, error: 'Unknown action: ' + action };
-    }
-
-    return _jsonResponse(result);
-  } catch (err) {
-    Logger.log('doPost error: ' + err.message);
-    return _jsonResponse({ success: false, error: err.message });
-  }
-}
-
-/**
- * GET handler — useful for health checks.
- */
-function doGet(e) {
-  return _jsonResponse({ status: 'ok', module: 'SocialMedia', version: '1.0.0' });
-}
+// NOTE: doPost and doGet are defined in Code.gs — SocialMedia.gs only exports helper functions.
 
 /**
  * Helper: builds a JSON ContentService response.
@@ -344,7 +274,7 @@ function _jsonResponse(data) {
 /**
  * Run once manually to create both sheets with correct headers and formatting.
  */
-function setupSheets() {
+function setupSocialSheets() {
   // Social media sheet
   var socialSheet = _getOrCreateSheet(SOCIAL_SHEET_NAME);
   socialSheet.clearContents();

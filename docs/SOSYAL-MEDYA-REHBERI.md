@@ -120,7 +120,7 @@ WP Admin → Ayarlar → AI Senkronizasyon → Sosyal Hesaplar alanına JSON:
 | Değişken | Değer |
 |----------|-------|
 | `APPS_SCRIPT_URL` | `https://script.google.com/macros/s/.../exec` |
-| `DERNEK_WEBHOOK_SECRET` | `571632` |
+| `DERNEK_WEBHOOK_SECRET` | `YOUR_SECRET_TOKEN` |
 | `GEMINI_API_KEY` | Gemini API anahtarı |
 
 ### Workflow'ları Import Etme
@@ -149,7 +149,7 @@ curl -X POST https://n8n.bitebimuv.org/webhook/social-pipeline \
 ### Doğrudan İçerik Pipeline
 ```bash
 curl -X POST https://bitebimuv.org/wp-json/dernek/v1/pipeline/run \
-  -H "X-Dernek-Token: 571632" \
+  -H "X-Dernek-Token: YOUR_SECRET_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "topic": "Gönüllülük trendleri 2025",
@@ -161,13 +161,13 @@ curl -X POST https://bitebimuv.org/wp-json/dernek/v1/pipeline/run \
 ### Gönderi Listesi
 ```bash
 curl https://bitebimuv.org/wp-json/dernek/v1/social-posts?status=pending_approval \
-  -H "X-Dernek-Token: 571632"
+  -H "X-Dernek-Token: YOUR_SECRET_TOKEN"
 ```
 
 ### Araştırma Drive'a Kaydetme
 ```bash
 curl -X POST https://bitebimuv.org/wp-json/dernek/v1/save-research \
-  -H "X-Dernek-Token: 571632" \
+  -H "X-Dernek-Token: YOUR_SECRET_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "topic": "Sivil toplum dijitalleşmesi",
@@ -201,7 +201,7 @@ Apps Script'te şunu çalıştır:
 2. AI Asistan → Sosyal Medya Sayfalarını Kur (yeni menü öğesi)
 
 Script Properties'e ekle:
-- `WEBHOOK_SECRET` = `571632`
+- `WEBHOOK_SECRET` = `YOUR_SECRET_TOKEN`
 - `MONTHLY_BUDGET_USD` = `20`
 
 ---

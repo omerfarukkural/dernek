@@ -56,9 +56,7 @@ class Dernek_Content_Pipeline {
 		register_rest_route( 'dernek/v1', '/pipeline/run', [
 			'methods'             => 'POST',
 			'callback'            => [ $this, 'rest_run_pipeline' ],
-			'permission_callback' => static function () {
-				return current_user_can( 'manage_options' );
-			},
+			'permission_callback' => [ 'Dernek_REST_API', 'auth' ],
 			'args' => [
 				'topic'        => [
 					'required'          => true,
@@ -114,7 +112,7 @@ class Dernek_Content_Pipeline {
 	 * @return array|\WP_Error Decoded JSON response.
 	 */
 	public function research_with_perplexity( string $topic, string $account_type ): array|WP_Error {
-		$api_key = get_option( 'perplexity_api_key' );
+		$api_key = get_option( 'dernek_perplexity_api_key' );
 		if ( empty( $api_key ) ) {
 			return new WP_Error( 'perplexity_config', 'Perplexity API anahtarı tanımlı değil.' );
 		}
@@ -212,7 +210,7 @@ class Dernek_Content_Pipeline {
 	 * @return array|\WP_Error Array with 'variants' key containing 3 content options.
 	 */
 	public function generate_with_gemini( array $research, string $platform, string $account_type ): array|WP_Error {
-		$api_key = get_option( 'gemini_api_key' );
+		$api_key = get_option( 'dernek_gemini_api_key' );
 		if ( empty( $api_key ) ) {
 			return new WP_Error( 'gemini_config', 'Gemini API anahtarı tanımlı değil.' );
 		}
@@ -304,7 +302,7 @@ class Dernek_Content_Pipeline {
 	 * @return string|\WP_Error Refined content string.
 	 */
 	public function refine_with_claude( string $content, string $tone_guidelines ): string|WP_Error {
-		$api_key = get_option( 'claude_api_key' );
+		$api_key = get_option( 'dernek_claude_api_key' );
 		if ( empty( $api_key ) ) {
 			return new WP_Error( 'claude_config', 'Claude API anahtarı tanımlı değil.' );
 		}

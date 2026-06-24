@@ -37,7 +37,7 @@
         "method": "POST",
         "sendHeaders": true,
         "headerParameters": { "parameters": [
-          { "name": "X-Royal-MCP-API-Key", "value": "RIEN2eethmYMvthOOXpsormJxDj7cpWc" },
+          { "name": "X-Royal-MCP-API-Key", "value": "{{ $env.ROYAL_MCP_API_KEY }}" },
           { "name": "Content-Type", "value": "application/json" }
         ]},
         "sendBody": true,

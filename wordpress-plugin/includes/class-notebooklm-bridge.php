@@ -14,10 +14,16 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class Dernek_NotebookLM_Bridge {
 
-	const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwRlqMSNbjsLaLkAdCZmFLvBIAnZAdeyegjbdWbkL3P-Pty2ruznNaampwqKKcyXYX6/exec';
-	const WEBHOOK_SECRET  = '571632';
-	const CACHE_GROUP     = 'dernek_notebooklm';
-	const CACHE_TTL       = 3600; // 1 hour
+	const CACHE_GROUP = 'dernek_notebooklm';
+	const CACHE_TTL   = 3600; // 1 hour
+
+	private static function apps_script_url(): string {
+		return (string) get_option( 'dernek_apps_script_url', '' );
+	}
+
+	private static function webhook_secret(): string {
+		return (string) get_option( 'dernek_api_secret', '' );
+	}
 
 	/** @var self|null */
 	private static $instance = null;
@@ -77,7 +83,8 @@ class Dernek_NotebookLM_Bridge {
 		// Verify secret — accept via body param or header
 		$secret = $request->get_param( 'secret' ) ?: $request->get_header( 'X-Webhook-Secret' );
 
-		if ( $secret !== self::WEBHOOK_SECRET ) {
+		$stored_secret = self::webhook_secret();
+		if ( empty( $stored_secret ) || empty( $secret ) || ! hash_equals( $stored_secret, $secret ) ) {
 			return new WP_REST_Response( [ 'error' => 'Unauthorized' ], 401 );
 		}
 
@@ -124,7 +131,7 @@ class Dernek_NotebookLM_Bridge {
 
 		$payload = [
 			'action'     => 'saveResearch',
-			'secret'     => self::WEBHOOK_SECRET,
+			'secret'     => self::webhook_secret(),
 			'topic'      => sanitize_text_field( $topic ),
 			'source'     => sanitize_text_field( $source ),
 			'content'    => $content,
@@ -133,7 +140,7 @@ class Dernek_NotebookLM_Bridge {
 			'word_count' => str_word_count( wp_strip_all_tags( $content ) ),
 		];
 
-		$response = wp_remote_post( self::APPS_SCRIPT_URL, [
+		$response = wp_remote_post( self::apps_script_url(), [
 			'timeout' => 30,
 			'headers' => [ 'Content-Type' => 'application/json' ],
 			'body'    => wp_json_encode( $payload ),
@@ -174,9 +181,9 @@ class Dernek_NotebookLM_Bridge {
 		$url = add_query_arg( [
 			'action' => 'getResearch',
 			'topic'  => rawurlencode( $topic ),
-			'secret' => self::WEBHOOK_SECRET,
+			'secret' => self::webhook_secret(),
 			'limit'  => 5,
-		], self::APPS_SCRIPT_URL );
+		], self::apps_script_url() );
 
 		$response = wp_remote_get( $url, [
 			'timeout' => 20,
@@ -255,8 +262,8 @@ class Dernek_NotebookLM_Bridge {
 	public function list_research_topics(): array {
 		$url = add_query_arg( [
 			'action' => 'listTopics',
-			'secret' => self::WEBHOOK_SECRET,
-		], self::APPS_SCRIPT_URL );
+			'secret' => self::webhook_secret(),
+		], self::apps_script_url() );
 
 		$response = wp_remote_get( $url, [
 			'timeout' => 15,
