@@ -27,25 +27,31 @@ jobs:
           headers = {"Authorization": f"cpanel {user}:{token}"}
 
           def mkdirp(parent, name):
-              resp = requests.post(
-                  f"https://{host}:2083/json-api/cpanel",
-                  headers=headers,
-                  data={
-                      "cpanel_jsonapi_module": "Fileman",
-                      "cpanel_jsonapi_func": "mkdir2",
-                      "cpanel_jsonapi_apiversion": "2",
-                      "dir": parent,
-                      "name": name,
-                  },
-                  verify=False, timeout=30,
-              )
-              j = resp.json()
-              result = j.get("cpanelresult", {})
-              data = result.get("data", [{}])
-              if data and data[0].get("result", {}).get("status") == 1:
-                  print(f"📁 created {parent}/{name}")
-              else:
-                  print(f"  mkdirp {name}: {result.get('error', data)} (may already exist)")
+              try:
+                  resp = requests.post(
+                      f"https://{host}:2083/json-api/cpanel",
+                      headers=headers,
+                      data={
+                          "cpanel_jsonapi_module": "Fileman",
+                          "cpanel_jsonapi_func": "mkdir2",
+                          "cpanel_jsonapi_apiversion": "2",
+                          "dir": parent,
+                          "name": name,
+                      },
+                      verify=False, timeout=30,
+                  )
+                  j = resp.json()
+                  result = j.get("cpanelresult", {})
+                  data = result.get("data", {})
+                  # data can be a dict or a list depending on cPanel version
+                  if isinstance(data, list):
+                      data = data[0] if data else {}
+                  if data.get("result") == 1:
+                      print(f"📁 created {parent}/{name}")
+                  else:
+                      print(f"  mkdirp {name}: {result.get('error', data)} (may already exist)")
+              except Exception as e:
+                  print(f"  mkdirp {name}: {e} (continuing)")
 
           plugins_dir = "/public_html/wp-content/plugins"
           mkdirp(plugins_dir, "dernek-project-sync")
