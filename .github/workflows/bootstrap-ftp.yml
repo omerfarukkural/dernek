@@ -22,48 +22,49 @@ jobs:
           host  = "srvc03.trwww.com"
           user  = os.environ["CPANEL_USER"]
           token = os.environ["CPANEL_TOKEN"]
-          base  = "/public_html/wp-content/plugins/dernek-project-sync"
+
+          # cPanel UAPI paths are HOME-RELATIVE (no leading slash)
+          base_rel = "public_html/wp-content/plugins/dernek-project-sync"
 
           headers = {"Authorization": f"cpanel {user}:{token}"}
 
-          def create_dir(path):
-              """UAPI Fileman::create_directory"""
+          def create_dir(rel_path):
+              """UAPI Fileman::mkdir — path relative to home dir"""
               try:
                   resp = requests.post(
-                      f"https://{host}:2083/execute/Fileman/create_directory",
+                      f"https://{host}:2083/execute/Fileman/mkdir",
                       headers=headers,
-                      data={"path": path, "permissions": "0755"},
+                      data={"path": rel_path, "permissions": "0755"},
                       verify=False, timeout=30,
                   )
                   j = resp.json()
                   if j.get("status") == 1:
-                      print(f"📁 created {path}")
+                      print(f"📁 created {rel_path}")
                       return True
                   else:
-                      # Directory may already exist — not fatal
                       err = (j.get("errors") or ["unknown"])[0]
-                      print(f"  mkdir {path}: {err} (may already exist, continuing)")
+                      print(f"  mkdir {rel_path}: {err} (may already exist, continuing)")
                       return True
               except Exception as e:
-                  print(f"  mkdir {path}: {e} (continuing)")
+                  print(f"  mkdir {rel_path}: {e} (continuing)")
                   return True
 
-          # Create directories (parent first)
-          create_dir("/public_html/wp-content/plugins/dernek-project-sync")
+          # Create directories (parent first) — home-relative paths
+          create_dir(base_rel)
           time.sleep(1)
-          create_dir(base + "/includes")
-          create_dir(base + "/public")
+          create_dir(base_rel + "/includes")
+          create_dir(base_rel + "/public")
           time.sleep(1)
 
           files = [
-              ("wordpress-plugin/dernek-project-sync.php",             base),
-              ("wordpress-plugin/includes/class-rest-api.php",         base + "/includes"),
-              ("wordpress-plugin/includes/class-post-type.php",        base + "/includes"),
-              ("wordpress-plugin/includes/class-admin-widget.php",     base + "/includes"),
-              ("wordpress-plugin/includes/class-social-scheduler.php", base + "/includes"),
-              ("wordpress-plugin/includes/class-content-pipeline.php", base + "/includes"),
-              ("wordpress-plugin/includes/class-notebooklm-bridge.php",base + "/includes"),
-              ("wordpress-plugin/public/shortcode.php",                base + "/public"),
+              ("wordpress-plugin/dernek-project-sync.php",             base_rel),
+              ("wordpress-plugin/includes/class-rest-api.php",         base_rel + "/includes"),
+              ("wordpress-plugin/includes/class-post-type.php",        base_rel + "/includes"),
+              ("wordpress-plugin/includes/class-admin-widget.php",     base_rel + "/includes"),
+              ("wordpress-plugin/includes/class-social-scheduler.php", base_rel + "/includes"),
+              ("wordpress-plugin/includes/class-content-pipeline.php", base_rel + "/includes"),
+              ("wordpress-plugin/includes/class-notebooklm-bridge.php",base_rel + "/includes"),
+              ("wordpress-plugin/public/shortcode.php",                base_rel + "/public"),
           ]
 
           ok = True
