@@ -28,16 +28,24 @@ jobs:
 
           def mkdirp(parent, name):
               resp = requests.post(
-                  f"https://{host}:2083/execute/Fileman/create_directory",
+                  f"https://{host}:2083/json-api/cpanel",
                   headers=headers,
-                  data={"dir": parent, "name": name},
+                  data={
+                      "cpanel_jsonapi_module": "Fileman",
+                      "cpanel_jsonapi_func": "mkdir2",
+                      "cpanel_jsonapi_apiversion": "2",
+                      "dir": parent,
+                      "name": name,
+                  },
                   verify=False, timeout=30,
               )
               j = resp.json()
-              if j.get("status") == 1:
+              result = j.get("cpanelresult", {})
+              data = result.get("data", [{}])
+              if data and data[0].get("result", {}).get("status") == 1:
                   print(f"📁 created {parent}/{name}")
               else:
-                  print(f"  mkdirp {name}: {j.get('errors')} (may already exist)")
+                  print(f"  mkdirp {name}: {result.get('error', data)} (may already exist)")
 
           plugins_dir = "/public_html/wp-content/plugins"
           mkdirp(plugins_dir, "dernek-project-sync")
