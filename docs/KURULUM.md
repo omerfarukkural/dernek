@@ -1,183 +1,192 @@
-# Dernek AI Takip Sistemi — Kurulum Rehberi
+# AI Takip Sistemi — Kurulum Kilavuzu
 
-## 1. Google Sheets Kurulumu
+## Gereksinimler
 
-### Apps Script Kodunu Yukleme
-1. Google Drive'da yeni bir Google Sheets dosyasi olusturun.
-2. Ust menudan **Uzantilar > Apps Script** seceneğine tiklayın.
-3. Acilan editorde soldaki dosya listesine `Code.gs`, `Sheets.gs`, `Drive.gs`, `Menu.gs`, `CostTracker.gs` dosyalarini olusturun ve bu repodaki iceriklerini yapiştirin.
-4. Kaydedin (Ctrl+S).
-
-### Sheets Yapısını Olusturma
-1. Apps Script editöründe `setupSheets` fonksiyonunu secin ve calistirin.
-2. Izin ekranlarina onay verin. Bu adim gerekli sekmeli yapıyı otomatik olusturur.
-
-### Web App Olarak Deploy Etme
-1. Apps Script editöründe **Deploy > New Deployment** tiklayin.
-2. Tur olarak **Web App** secin.
-3. Asagidaki ayarlari yapın:
-   - **Description:** v1.0
-   - **Execute as:** Me
-   - **Who has access:** Anyone
-4. **Deploy** butonuna basin ve oluşan URL'yi kaydedin (örnek: `https://script.google.com/macros/s/XXXX/exec`).
-
-### Script Properties Ayarlama
-1. Apps Script editöründe **Project Settings > Script Properties** secin.
-2. Asagidaki özellikleri ekleyin:
-   - `WEBHOOK_SECRET` — Güçlü, rastgele bir token (örneğin: `my-secret-2024`)
-   - `MONTHLY_BUDGET_USD` — Aylık bütçe limiti (örneğin: `10`)
+- Node.js 18 veya uzeri (local proxy icin)
+- Google Chrome tarayici (extension icin)
+- Google hesabi (Sheets ve Drive icin)
+- WordPress 6.0+ sitesi (opsiyonel, bitebimuv.org)
+- n8n instance (opsiyonel, n8n.bitebimuv.org)
 
 ---
 
-## 2. Chrome Extension Kurulumu
+## Adim 1: Google Sheets Kurulumu
 
-1. Chrome tarayıcısında adres çubuğuna `chrome://extensions` yazın.
-2. Sağ üstten **Developer mode** (Geliştirici modu) anahtarını açın.
-3. **Load unpacked** (Paketlenmemişi yükle) butonuna tıklayın.
-4. Bu repodaki `chrome-extension/` klasörünü seçin.
-5. Uzantı yüklendikten sonra araç çubuğundaki AI simgesine tıklayın.
-6. **Ayarlar** sekmesine geçin ve şunları doldurun:
-   - **Apps Script Web App URL:** Yukarıda aldığınız deploy URL'si
-   - **Webhook Secret Token:** `WEBHOOK_SECRET` için girdiğiniz değer
-7. Kaydedin.
-
-> **Not:** `icons/` klasöründe `icon16.png`, `icon48.png`, `icon128.png` dosyaları eksikse uzantı yüklenemez. `icons/README.txt` dosyasındaki talimatlara göre ikonları ekleyin.
-
----
-
-## 3. Mac Local Proxy Kurulumu
-
-### Kurulum
-```bash
-cd /Users/YOUR_USERNAME/dernek/local-proxy
-npm install
-cp .env.example .env
-```
-
-`.env` dosyasını düzenleyin:
-```
-PROXY_PORT=8080
-APPS_SCRIPT_URL=https://script.google.com/macros/s/XXXX/exec
-WEBHOOK_SECRET=my-secret-2024
-DEFAULT_PROJECT=Genel
-```
-
-### Test
-```bash
-npm start
-```
-
-### Sistem Servisi Olarak Kurma (launchd)
-1. `com.dernek.aiproxy.plist` dosyasındaki `YOUR_USERNAME` değerlerini gerçek kullanıcı adınızla değiştirin.
-2. Dosyayı LaunchAgents klasörüne kopyalayın:
-```bash
-cp com.dernek.aiproxy.plist ~/Library/LaunchAgents/
-launchctl load ~/Library/LaunchAgents/com.dernek.aiproxy.plist
-```
-3. Proxy'nin çalıştığını doğrulayın:
-```bash
-launchctl list | grep dernek
-```
+1. **Yeni bir Google Sheets tablosu olusturun** (ornegin: "AI Proje Takip")
+2. **Apps Script'i acin:** Uzantilar > Apps Script
+3. **Dosyalari yapiştirin:**
+   - `Sheets.gs`, `Drive.gs`, `Menu.gs`, `CostTracker.gs` iceriklerini ilgili `.gs` dosyalarina kopyalayin
+   - Varsa `Code.gs` icerigini silin ya da bos birakin
+4. **Kaydedin** (Ctrl+S) ve **Calistirin:** `setupSheets` fonksiyonunu secip calistirin — izin isteyin ve onaylayin
+5. **Web App olarak deploy edin:**
+   - Sagda "Deploy > Yeni deployment" tiklayin
+   - Tur: "Web app"
+   - Calistir: "Ben" (Me)
+   - Erisim: "Herkes" (Anyone)
+   - Deploy tiklayin — URL'yi kopyalayin
+6. **Script Properties ayarlayin:** Proje Ayarlari > Script Properties:
+   - `WEBHOOK_SECRET` = guclu bir token (ornegin: `dernek-secret-2024-xyz`)
+   - `MONTHLY_BUDGET_USD` = `10` (veya istediginiz tutar)
 
 ---
 
-## 4. iOS Shortcut Kurulumu
+## Adim 2: Chrome Extension Kurulumu
 
-### Manuel Kayıt Adımı
-1. iPhone'da **Kısayollar** (Shortcuts) uygulamasını açın.
-2. Yeni kısayol oluşturun ve şu adımları ekleyin:
-   - **Metni Sor** — kullanıcıdan proje adı ve prompt özeti isteyin.
-   - **URL** — Apps Script Web App URL'sini girin.
-   - **URL İçeriğini Al** — Method: POST, Request Body: JSON olarak ayarlayın.
-   - JSON gövdesine şunu ekleyin:
+1. Chrome'da `chrome://extensions` adresine gidin
+2. Sag ust kosede **"Gelistirici modu"** acin
+3. **"Paketsiz yukleme"** butonuna basin
+4. `dernek/chrome-extension/` klasorunu secin
+5. Extension yuklendi — ikon toolbar'da gorunmeli
+6. **Extension'i yapilandirin:**
+   - Ikon'a sag tikla > "Popup'u ac" ya da normal tikla
+   - "Ayarlar" sekmesine gec
+   - Apps Script Web App URL'sini yapistir
+   - Webhook Secret Token'i gir
+   - "Kaydet" tikla
+7. `claude.ai`, `gemini.google.com` veya `perplexity.ai` acin — badge "aktif" gostermeli
+
+---
+
+## Adim 3: Mac Local Proxy
+
+1. **Dosyalari hazirlayin:**
+   ```bash
+   cd /Users/YOUR_USERNAME/dernek/local-proxy
+   npm install
+   ```
+2. **.env dosyasi olusturun:**
+   ```bash
+   cp .env.example .env
+   ```
+   Ardından `.env` dosyasini duzenleyin:
+   ```
+   PROXY_PORT=8080
+   APPS_SCRIPT_URL=https://script.google.com/macros/s/SCRIPT_ID/exec
+   WEBHOOK_SECRET=dernek-secret-2024-xyz
+   DEFAULT_PROJECT=Genel
+   ```
+3. **Test calistirma:**
+   ```bash
+   node proxy-server.js
+   ```
+   Cikti: `[AI Proxy] Calistirildi: http://127.0.0.1:8080`
+4. **Launchd ile otomatik baslatma (Mac):**
+   ```bash
+   # com.dernek.aiproxy.plist icerisindeki YOUR_USERNAME degerini degistirin
+   cp com.dernek.aiproxy.plist ~/Library/LaunchAgents/
+   launchctl load ~/Library/LaunchAgents/com.dernek.aiproxy.plist
+   ```
+5. **IntelliJ/IDE yapilandirmasi:** HTTP isteklerinde proxy olarak `127.0.0.1:8080` kullanin, `X-Target-Host: api.anthropic.com` header'i ekleyin
+
+---
+
+## Adim 4: iOS Shortcut (Manuel Adimlar)
+
+1. Apps Script Web App URL'sini kopyalayin
+2. iPhone'da **Kisayollar** uygulamasini acin
+3. **Yeni Kisayol** olusturun
+4. **"URL icerigini al"** veya **"Web istegi"** eylemi ekleyin:
+   - URL: `https://script.google.com/macros/s/SCRIPT_ID/exec`
+   - Yontem: POST
+   - Govde: JSON
+   - Icerik:
      ```json
      {
-       "token": "YOUR_WEBHOOK_SECRET",
+       "token": "dernek-secret-2024-xyz",
        "type": "conversation",
-       "device": "ios-shortcut",
+       "device": "iphone",
        "tool": "claude",
-       "project": "Kısayol Girdisi",
-       "prompt_summary": "Kısayol Girdisi",
+       "project": "Genel",
+       "prompt_summary": "Manuel iOS logu",
        "response_summary": "",
        "tokens_used": 0
      }
      ```
-3. Kısayolu ana ekrana ekleyin.
-
-### Apps Script URL'sini Shortcut'a Girme
-- Kısayoldaki URL adımında tam deploy URL'sini kullanın (örnek: `https://script.google.com/macros/s/XXXX/exec`).
-- `YOUR_WEBHOOK_SECRET` yerine gerçek tokenı yazın.
+5. Kisayolu **Ana Ekrana** ekleyin
 
 ---
 
-## 5. WordPress Eklentisi Kurulumu
+## Adim 5: WordPress Eklentisi
 
-### Turhost cPanel FTP ile Yükleme
-1. Turhost cPanel'e giriş yapın.
-2. **File Manager** veya FTP istemcisi (FileZilla) ile bağlanın.
-3. `wp-content/plugins/` dizinine gidin.
-4. `wordpress-plugin/` klasörünü `dernek-project-sync/` adıyla yükleyin. Klasör yapısı şöyle olmalı:
-   ```
-   wp-content/plugins/dernek-project-sync/
-   ├── dernek-project-sync.php
-   ├── includes/
-   │   ├── class-post-type.php
-   │   ├── class-rest-api.php
-   │   └── class-admin-widget.php
-   └── public/
-       └── shortcode.php
-   ```
-
-### wp-admin'den Aktive Etme
-1. WordPress yönetim paneline giriş yapın.
-2. **Eklentiler > Yüklü Eklentiler** sayfasına gidin.
-3. **Dernek AI Proje Senkronizasyonu** eklentisini bulun ve **Etkinleştir** butonuna tıklayın.
-
-### Ayarlar Sayfası
-1. **Ayarlar > AI Senkronizasyon** menüsüne gidin.
-2. Şu alanları doldurun:
-   - **Google Sheets Web App URL:** Deploy URL'niz
-   - **API Secret Token:** `WEBHOOK_SECRET` değeriniz
-3. **Kaydet** butonuna tıklayın.
+1. **Eklentiyi yukleyin:**
+   - FTP veya cPanel Dosya Yoneticisi ile `dernek/wordpress-plugin/` klasorunu
+     `wp-content/plugins/dernek-project-sync/` olarak kopyalayin
+2. **wp-admin'de aktive edin:**
+   - Eklentiler > "Dernek AI Proje Senkronizasyonu" > Etkinlestir
+3. **Ayarlari girin:**
+   - Ayarlar > AI Senkronizasyon
+   - Google Sheets Web App URL'sini girin
+   - API Secret Token'i girin (Sheets'tekiyle ayni)
+   - Kaydet
 
 ---
 
-## 6. n8n Workflow Kurulumu
+## Adim 6: n8n Workflow'lari
 
-### n8n.bitebimuv.org Üzerinden Import
-1. `https://n8n.bitebimuv.org` adresine giriş yapın.
-2. Sol menüden **Workflows > New Workflow** secin.
-3. Sağ üstten **Import from File** seçeneğine tıklayın.
-4. `n8n-workflows/` klasöründeki JSON dosyalarını sırayla içe aktarın:
-   - `sheets-to-wordpress.json`
-   - `github-to-gcp-deploy.json`
-   - `deploy-log.json`
-
-### Credential Ayarları
-Her workflow için gerekli credential'ları ayarlayın:
-
-**Google Sheets credential:**
-1. n8n'de **Credentials > New** seçin.
-2. Google Sheets OAuth2 credential oluşturun.
-3. Workflow'daki Google Sheets node'larına bu credential'ı atayın.
-
-**Ortam değişkenleri:**
-n8n Settings > Environment Variables bölümüne ekleyin:
-- `SHEETS_ID` — Google Sheets dosya ID'si (URL'den alınır)
-- `APPS_SCRIPT_URL` — Web App deploy URL'si
-- `WEBHOOK_SECRET` — Secret token
-- `GCP_PROJECT_ID` — Google Cloud proje ID'si (deploy workflow için)
-- `GCP_TRIGGER_ID` — Cloud Build trigger ID'si
+1. **n8n.bitebimuv.org** adresine giris yapin
+2. **Workflow iceri aktar:**
+   - Sol menu > Workflows > Import from file
+   - `n8n-workflows/sheets-to-wordpress.json` secin
+   - Ayni islemi diger iki JSON icin tekrarlayin
+3. **Credential ayarlayin:**
+   - `Google Sheets`: Google hesabinizla OAuth baglantin
+   - `WordPress Basic Auth`: WP kullanici adi ve uygulama sifresi
+   - `GCP Bearer Token`: Cloud Build icin service account token
+4. **Environment variable'lari ayarlayin** (n8n Settings > Variables):
+   - `SHEETS_ID`: Google Sheets dosya ID'si (URL'deki uzun string)
+   - `WP_URL`: `https://bitebimuv.org`
+   - `WEBHOOK_SECRET`: ayni secret token
+   - `GCP_PROJECT_ID`: GCP proje adi
+   - `CLOUD_BUILD_TRIGGER_ID`: Cloud Build trigger ID
 
 ---
 
-## 7. NotebookLM Entegrasyonu
+## Adim 7: NotebookLM Entegrasyonu
 
-### Drive Klasörünü Kaynak Olarak Ekleme
-1. [NotebookLM](https://notebooklm.google.com) adresine gidin.
-2. Yeni bir notebook oluşturun veya mevcut birine girin.
-3. **Add Source > Google Drive** seçeneğine tıklayın.
-4. `AI-Projeler/` ana klasörünü veya ilgili proje alt klasörünü seçin.
-5. NotebookLM, Drive'a kaydedilen konuşma dosyalarını (.md) otomatik olarak indeksler.
+1. **Google Drive**'da `AI-Projeler` klasorunu acin (Apps Script otomatik olusturur)
+2. **NotebookLM**'e gidin: `notebooklm.google.com`
+3. **Yeni notebook olusturun:** proje adiyla
+4. **Kaynak ekleyin:**
+   - "Kaynak ekle" > "Google Drive"
+   - `AI-Projeler/Claude/PROJE_ADI/` klasorunu secin
+5. Drive'a her yeni MD dosyasi eklendiginde NotebookLM otomatik guncellenir
 
-> **İpucu:** Her proje için ayrı bir NotebookLM notebook oluşturarak proje bazında sorgulama yapabilirsiniz. Drive klasörüne yeni dosyalar eklendikçe NotebookLM'deki kaynakları **Refresh** ederek güncel tutun.
+---
+
+## Test
+
+1. `claude.ai`'da herhangi bir konusma yapin
+2. Extension popup'u acin, proje secin, "Simdi Kaydet" tiklayin
+3. **Sheets'te** "Konusma Gecmisi" sayfasinda yeni satir gorunmeli
+4. **Drive'da** `AI-Projeler/Claude/PROJE/API_Ciktilari/` klasorunde `.md` dosyasi olusturmali
+5. **WordPress'te** AI Projeleri post type'inda entry gorunmeli
+
+---
+
+## Sorun Giderme
+
+### Chrome Extension Calistirmiyor
+- `chrome://extensions` > extension'in "Hatalar" butonuna bakin
+- Popup'ta "Desteksiz sayfa" gosteriyor: Claude/Gemini/Perplexity sayfasinda olmalisiniz
+- Console'da `[AI Takipci]` ile baslayan log satirlarina bakin (F12)
+
+### Proxy Baglanti Hatasi
+```bash
+# Log dosyasini kontrol edin
+tail -f ~/Library/Logs/dernek-ai-proxy-error.log
+
+# Servisin calisip calismadigini kontrol edin
+launchctl list | grep dernek
+
+# Manuel restart
+launchctl unload ~/Library/LaunchAgents/com.dernek.aiproxy.plist
+launchctl load ~/Library/LaunchAgents/com.dernek.aiproxy.plist
+```
+
+### WordPress 401 Hatasi
+- `Ayarlar > AI Senkronizasyon` sayfasinda token'in dogru girildigini kontrol edin
+- REST API'nin aktif oldugunu test edin: `curl https://bitebimuv.org/wp-json/dernek/v1/projects`
+- `.htaccess`'te Authorization header'inin gecmesini saglayin:
+  ```apache
+  SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1
+  ```

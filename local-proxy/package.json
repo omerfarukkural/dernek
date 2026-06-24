@@ -1,7 +1,7 @@
 {
   "name": "dernek-ai-proxy",
   "version": "1.0.0",
-  "description": "AI API cagrilarini yakalayan local proxy",
+  "description": "AI API cagrilarini yakalayan local proxy — Mac/IntelliJ icin",
   "main": "proxy-server.js",
   "scripts": {
     "start": "node proxy-server.js",

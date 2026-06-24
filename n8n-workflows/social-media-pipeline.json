@@ -1,0 +1,134 @@
+{
+  "name": "Sosyal Medya İçerik Pipeline",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "social-pipeline",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.perplexity.ai/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "={\n  \"model\": \"sonar-pro\",\n  \"messages\": [\n    {\"role\": \"system\", \"content\": \"Türkçe sosyal medya içerik araştırmacısısın.\"},\n    {\"role\": \"user\", \"content\": \"Şu konu için araştırma yap: {{ $json.topic }}. Hesap türü: {{ $json.account_type }}\"}\n  ],\n  \"max_tokens\": 800\n}",
+        "options": {}
+      },
+      "id": "perplexity-research",
+      "name": "Perplexity Araştırma",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [460, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "perplexity-creds",
+          "name": "Perplexity API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const research = $input.item.json.choices[0].message.content;\nconst topic = $('Webhook Trigger').item.json.topic;\nconst account_type = $('Webhook Trigger').item.json.account_type;\nconst platforms = $('Webhook Trigger').item.json.platforms || ['threads'];\n\nreturn platforms.map(platform => ({\n  json: {\n    research,\n    topic,\n    account_type,\n    platform\n  }\n}));"
+      },
+      "id": "split-platforms",
+      "name": "Platformları Böl",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={{ $env.GEMINI_API_KEY }}",
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "={\n  \"contents\": [{\n    \"parts\": [{\n      \"text\": \"Araştırmayı kullanarak {{ $json.platform }} için Türkçe gönderi yaz (max 500 karakter). Hesap türü: {{ $json.account_type }}. Araştırma: {{ $json.research }}\"\n    }]\n  }],\n  \"generationConfig\": {\"maxOutputTokens\": 300, \"temperature\": 0.7}\n}",
+        "options": {}
+      },
+      "id": "gemini-generate",
+      "name": "Gemini İçerik Üret",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const content = $input.item.json.candidates[0].content.parts[0].text;\nconst prev = $('Platformları Böl').item.json;\n\nreturn [{\n  json: {\n    ...prev,\n    generated_content: content\n  }\n}];"
+      },
+      "id": "extract-content",
+      "name": "İçerik Çıkar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://bitebimuv.org/wp-json/dernek/v1/social-post",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "X-Dernek-Token", "value": "={{ $env.DERNEK_WEBHOOK_SECRET }}"},
+            {"name": "Content-Type", "value": "application/json"}
+          ]
+        },
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "={\n  \"content\": \"{{ $json.generated_content }}\",\n  \"platform\": \"{{ $json.platform }}\",\n  \"account_type\": \"{{ $json.account_type }}\",\n  \"ai_tool\": \"n8n:perplexity+gemini\"\n}",
+        "options": {}
+      },
+      "id": "create-wp-post",
+      "name": "WordPress'e Kaydet",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.APPS_SCRIPT_URL }}",
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "={\n  \"token\": \"{{ $env.DERNEK_WEBHOOK_SECRET }}\",\n  \"action\": \"logSocialPost\",\n  \"account\": \"{{ $('Platformları Böl').item.json.account_type }}\",\n  \"platform\": \"{{ $('Platformları Böl').item.json.platform }}\",\n  \"content\": \"{{ $('İçerik Çıkar').item.json.generated_content.substring(0, 200) }}\",\n  \"status\": \"pending_approval\",\n  \"post_id\": \"{{ $json.post_id }}\",\n  \"ai_tool\": \"n8n:perplexity+gemini\"\n}",
+        "options": {}
+      },
+      "id": "sheets-log",
+      "name": "Sheets Log",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": true,\n  \"topic\": \"{{ $('Webhook Trigger').item.json.topic }}\",\n  \"posts_created\": true\n}"
+      },
+      "id": "respond",
+      "name": "Yanıt Dön",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1780, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {"main": [[{"node": "Perplexity Araştırma", "type": "main", "index": 0}]]},
+    "Perplexity Araştırma": {"main": [[{"node": "Platformları Böl", "type": "main", "index": 0}]]},
+    "Platformları Böl": {"main": [[{"node": "Gemini İçerik Üret", "type": "main", "index": 0}]]},
+    "Gemini İçerik Üret": {"main": [[{"node": "İçerik Çıkar", "type": "main", "index": 0}]]},
+    "İçerik Çıkar": {"main": [[{"node": "WordPress'e Kaydet", "type": "main", "index": 0}]]},
+    "WordPress'e Kaydet": {"main": [[{"node": "Sheets Log", "type": "main", "index": 0}]]},
+    "Sheets Log": {"main": [[{"node": "Yanıt Dön", "type": "main", "index": 0}]]}
+  },
+  "settings": {"executionOrder": "v1"}
+}
