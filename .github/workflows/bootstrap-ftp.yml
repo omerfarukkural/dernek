@@ -21,16 +21,14 @@ jobs:
             local src="$1"
             local dest_dir="$2"
             local filename=$(basename "$src")
-            local content
-            content=$(cat "$src")
 
             echo "Uploading: $filename -> $dest_dir"
-            response=$(curl -sk \
+            response=$(curl -sk --max-time 60 \
               -H "Authorization: cpanel $USER:$TOKEN" \
               "https://$HOST:2083/execute/Fileman/save_file_content" \
               --data-urlencode "dir=$dest_dir" \
               --data-urlencode "file=$filename" \
-              --data-urlencode "content=$content")
+              --data-urlencode "content@$src")
 
             echo "$response"
             if echo "$response" | grep -q '"status":1'; then
