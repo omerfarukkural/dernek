@@ -16,7 +16,7 @@ jobs:
           CPANEL_TOKEN: ${{ secrets.CPANEL_TOKEN }}
         run: |
           python3 << 'EOF'
-          import os, requests, sys
+          import os, requests, sys, time
           requests.packages.urllib3.disable_warnings()
 
           host  = "srvc03.trwww.com"
@@ -26,47 +26,44 @@ jobs:
 
           headers = {"Authorization": f"cpanel {user}:{token}"}
 
-          def mkdirp(parent, name):
+          def create_dir(path):
+              """UAPI Fileman::create_directory"""
               try:
                   resp = requests.post(
-                      f"https://{host}:2083/json-api/cpanel",
+                      f"https://{host}:2083/execute/Fileman/create_directory",
                       headers=headers,
-                      data={
-                          "cpanel_jsonapi_module": "Fileman",
-                          "cpanel_jsonapi_func": "mkdir2",
-                          "cpanel_jsonapi_apiversion": "2",
-                          "dir": parent,
-                          "name": name,
-                      },
+                      data={"path": path, "permissions": "0755"},
                       verify=False, timeout=30,
                   )
                   j = resp.json()
-                  result = j.get("cpanelresult", {})
-                  data = result.get("data", {})
-                  # data can be a dict or a list depending on cPanel version
-                  if isinstance(data, list):
-                      data = data[0] if data else {}
-                  if data.get("result") == 1:
-                      print(f"📁 created {parent}/{name}")
+                  if j.get("status") == 1:
+                      print(f"📁 created {path}")
+                      return True
                   else:
-                      print(f"  mkdirp {name}: {result.get('error', data)} (may already exist)")
+                      # Directory may already exist — not fatal
+                      err = (j.get("errors") or ["unknown"])[0]
+                      print(f"  mkdir {path}: {err} (may already exist, continuing)")
+                      return True
               except Exception as e:
-                  print(f"  mkdirp {name}: {e} (continuing)")
+                  print(f"  mkdir {path}: {e} (continuing)")
+                  return True
 
-          plugins_dir = "/public_html/wp-content/plugins"
-          mkdirp(plugins_dir, "dernek-project-sync")
-          mkdirp(base, "includes")
-          mkdirp(base, "public")
+          # Create directories (parent first)
+          create_dir("/public_html/wp-content/plugins/dernek-project-sync")
+          time.sleep(1)
+          create_dir(base + "/includes")
+          create_dir(base + "/public")
+          time.sleep(1)
 
           files = [
-              ("wordpress-plugin/dernek-project-sync.php",                      base),
-              ("wordpress-plugin/includes/class-rest-api.php",                  base + "/includes"),
-              ("wordpress-plugin/includes/class-post-type.php",                 base + "/includes"),
-              ("wordpress-plugin/includes/class-admin-widget.php",              base + "/includes"),
-              ("wordpress-plugin/includes/class-social-scheduler.php",          base + "/includes"),
-              ("wordpress-plugin/includes/class-content-pipeline.php",          base + "/includes"),
-              ("wordpress-plugin/includes/class-notebooklm-bridge.php",         base + "/includes"),
-              ("wordpress-plugin/public/shortcode.php",                         base + "/public"),
+              ("wordpress-plugin/dernek-project-sync.php",             base),
+              ("wordpress-plugin/includes/class-rest-api.php",         base + "/includes"),
+              ("wordpress-plugin/includes/class-post-type.php",        base + "/includes"),
+              ("wordpress-plugin/includes/class-admin-widget.php",     base + "/includes"),
+              ("wordpress-plugin/includes/class-social-scheduler.php", base + "/includes"),
+              ("wordpress-plugin/includes/class-content-pipeline.php", base + "/includes"),
+              ("wordpress-plugin/includes/class-notebooklm-bridge.php",base + "/includes"),
+              ("wordpress-plugin/public/shortcode.php",                base + "/public"),
           ]
 
           ok = True
