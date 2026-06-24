@@ -16,101 +16,87 @@ const AI_ENDPOINTS = {
 };
 
 const server = http.createServer((req, res) => {
-  const targetHostHeader = req.headers['x-target-host'];
-  if (!targetHostHeader) {
+  const targetHost = req.headers['x-target-host'];
+  if (!targetHost) {
     res.writeHead(400);
-    res.end('X-Target-Host header gerekli');
+    res.end(JSON.stringify({ error: 'X-Target-Host header gerekli' }));
     return;
   }
-  const toolName = AI_ENDPOINTS[targetHostHeader] || 'unknown';
+  const toolName = AI_ENDPOINTS[targetHost] || 'unknown';
   let body = '';
   req.on('data', chunk => { body += chunk; });
   req.on('end', () => {
-    const options = {
-      hostname: targetHostHeader,
-      path: req.url,
-      method: req.method,
-      headers: Object.assign({}, req.headers, { host: targetHostHeader })
-    };
-    delete options.headers['x-target-host'];
-
-    const proxyReq = https.request(options, proxyRes => {
+    const headers = Object.assign({}, req.headers, { host: targetHost });
+    delete headers['x-target-host'];
+    const opts = { hostname: targetHost, path: req.url, method: req.method, headers };
+    const proxyReq = https.request(opts, proxyRes => {
       let responseBody = '';
       proxyRes.on('data', chunk => { responseBody += chunk; });
       proxyRes.on('end', () => {
         res.writeHead(proxyRes.statusCode, proxyRes.headers);
         res.end(responseBody);
         if (toolName !== 'unknown' && WEBHOOK_URL && WEBHOOK_SECRET) {
-          logToSheets(toolName, body, responseBody).catch(err => console.error('Log error:', err.message));
+          logToSheets(toolName, body, responseBody).catch(e => console.error('[Proxy] Log error:', e.message));
         }
       });
     });
-    proxyReq.on('error', e => {
-      console.error('Proxy error:', e.message);
-      res.writeHead(502);
-      res.end('Proxy error: ' + e.message);
-    });
+    proxyReq.on('error', e => { res.writeHead(502); res.end('Proxy error: ' + e.message); });
     if (body) proxyReq.write(body);
     proxyReq.end();
   });
 });
 
-async function logToSheets(tool, requestBody, responseBody) {
-  let reqData = {}, resData = {};
-  try { reqData = JSON.parse(requestBody); } catch (e) {}
-  try { resData = JSON.parse(responseBody); } catch (e) {}
-  const promptText = extractPrompt(reqData, tool);
-  const responseText = extractResponse(resData, tool);
-  const tokens = extractTokens(resData);
+async function logToSheets(tool, reqBody, resBody) {
+  let req = {}, res = {};
+  try { req = JSON.parse(reqBody); } catch (e) {}
+  try { res = JSON.parse(resBody); } catch (e) {}
+  const prompt = extractPrompt(req, tool);
+  const response = extractResponse(res, tool);
+  const tokens = extractTokens(res);
   const payload = JSON.stringify({
-    token: WEBHOOK_SECRET,
-    type: 'conversation',
-    device: 'mac-proxy',
-    tool,
-    project: DEFAULT_PROJECT,
-    prompt_summary: promptText.substring(0, 500),
-    response_summary: responseText.substring(0, 1000),
+    token: WEBHOOK_SECRET, type: 'conversation',
+    device: 'mac-proxy', tool, project: DEFAULT_PROJECT,
+    prompt_summary: prompt.substring(0, 500),
+    response_summary: response.substring(0, 1000),
     tokens_used: tokens
   });
   const u = new URL(WEBHOOK_URL);
   return new Promise((resolve, reject) => {
-    const options = {
-      hostname: u.hostname,
-      path: u.pathname + u.search,
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) }
-    };
-    const req = https.request(options, res => {
-      res.on('data', () => {});
-      res.on('end', resolve);
-    });
-    req.on('error', reject);
-    req.write(payload);
-    req.end();
+    const options = { hostname: u.hostname, path: u.pathname + u.search, method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) } };
+    const r = https.request(options, resp => { resp.resume(); resp.on('end', resolve); });
+    r.on('error', reject);
+    r.write(payload); r.end();
   });
 }
 
-function extractPrompt(data, tool) {
-  if (tool === 'claude' && data.messages) return data.messages.map(m => typeof m.content === 'string' ? m.content : JSON.stringify(m.content)).join(' ');
-  if (tool === 'gemini' && data.contents) return JSON.stringify(data.contents).substring(0, 500);
-  if (data.messages && data.messages[0]) return String(data.messages[0].content || '');
-  return JSON.stringify(data).substring(0, 300);
+function extractPrompt(d, tool) {
+  if (tool === 'claude' && d.messages) return d.messages.map(m => typeof m.content === 'string' ? m.content : JSON.stringify(m.content)).join(' ');
+  if (tool === 'gemini' && d.contents) return JSON.stringify(d.contents).substring(0, 500);
+  if (d.messages && d.messages[0]) return String(d.messages[0].content || '');
+  return JSON.stringify(d).substring(0, 300);
 }
 
-function extractResponse(data, tool) {
-  if (tool === 'claude' && data.content) return data.content.map(c => c.text || '').join(' ');
-  if (tool === 'gemini' && data.candidates) return (data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts) ? data.candidates[0].content.parts.map(p => p.text || '').join(' ') : '';
-  if (data.choices && data.choices[0]) return String(data.choices[0].message && data.choices[0].message.content || '');
-  return JSON.stringify(data).substring(0, 500);
+function extractResponse(d, tool) {
+  if (tool === 'claude' && d.content) return d.content.map(c => c.text || '').join(' ');
+  if (tool === 'gemini' && d.candidates && d.candidates[0]) {
+    const parts = (d.candidates[0].content || {}).parts || [];
+    return parts.map(p => p.text || '').join(' ');
+  }
+  if (d.choices && d.choices[0] && d.choices[0].message) return String(d.choices[0].message.content || '');
+  return JSON.stringify(d).substring(0, 500);
 }
 
-function extractTokens(data) {
-  if (data.usage) return (data.usage.input_tokens || data.usage.prompt_tokens || 0) + (data.usage.output_tokens || data.usage.completion_tokens || 0);
-  if (data.usageMetadata) return (data.usageMetadata.promptTokenCount || 0) + (data.usageMetadata.candidatesTokenCount || 0);
+function extractTokens(d) {
+  if (d.usage) return (d.usage.input_tokens || d.usage.prompt_tokens || 0) + (d.usage.output_tokens || d.usage.completion_tokens || 0);
+  if (d.usageMetadata) return (d.usageMetadata.promptTokenCount || 0) + (d.usageMetadata.candidatesTokenCount || 0);
   return 0;
 }
 
 server.listen(PORT, '127.0.0.1', () => {
-  console.log('AI Proxy aktif: http://127.0.0.1:' + PORT);
-  console.log('Desteklenen araclar: Claude, Gemini, Perplexity');
+  console.log('[AI Proxy] Calistirildi: http://127.0.0.1:' + PORT);
+  console.log('[AI Proxy] Desteklenen: Claude (api.anthropic.com), Gemini, Perplexity');
+  console.log('[AI Proxy] Proje: ' + DEFAULT_PROJECT);
 });
+
+process.on('uncaughtException', e => console.error('[AI Proxy] Uncaught:', e.message));

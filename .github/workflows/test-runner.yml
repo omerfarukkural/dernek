@@ -1,0 +1,16 @@
+name: Test Runner
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/jolly-feynman-dt0epl
+    paths:
+      - '.github/workflows/test-runner.yml'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Hello
+        run: echo "Runner works!"

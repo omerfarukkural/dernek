@@ -1,38 +1,73 @@
 {
-  "name": "Deploy Log Automation",
+  "name": "Deploy Log -> Google Sheets",
   "nodes": [
     {
-      "id": "1",
-      "name": "Webhook Deploy Log",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "deploy-log",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Deploy Log Webhook",
       "type": "n8n-nodes-base.webhook",
-      "parameters": { "path": "deploy-log", "httpMethod": "POST", "responseMode": "onReceived" },
-      "position": [250, 300]
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "webhookId": "deploy-log-hook"
     },
     {
-      "id": "2",
-      "name": "Append to Sheets",
-      "type": "n8n-nodes-base.googleSheets",
       "parameters": {
-        "operation": "append",
-        "documentId": { "mode": "id", "value": "={{ $env.SHEETS_ID }}" },
-        "sheetName": "Hosting & Deploy Log",
+        "conditions": {
+          "string": [{ "value1": "={{ $json.body.token }}", "operation": "equals", "value2": "={{ $env.WEBHOOK_SECRET }}" }]
+        }
+      },
+      "id": "auth-check",
+      "name": "Token Dogrula",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": { "__rl": true, "mode": "id", "value": "={{ $env.SHEETS_ID }}" },
+        "sheetName": { "__rl": true, "mode": "name", "value": "Hosting Deploy Log" },
         "columns": {
           "mappingMode": "defineBelow",
           "value": {
-            "Tarih": "={{ $now }}",
-            "Alan Adi": "={{ $json.domain }}",
-            "Islem": "={{ $json.action }}",
-            "Arac": "={{ $json.tool }}",
-            "Durum": "={{ $json.status }}",
-            "URL": "={{ $json.url }}",
-            "Notlar": "={{ $json.notes }}"
+            "Tarih": "={{ new Date().toLocaleString('tr-TR') }}",
+            "Alan Adi": "={{ $json.body.domain || '' }}",
+            "Islem": "={{ $json.body.action || '' }}",
+            "Arac": "={{ $json.body.tool || '' }}",
+            "Durum": "={{ $json.body.status || '' }}",
+            "URL": "={{ $json.body.url || '' }}",
+            "Notlar": "={{ $json.body.notes || '' }}"
           }
         }
       },
-      "position": [450, 300]
+      "id": "append-to-sheets",
+      "name": "Sheets'e Ekle",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.2,
+      "position": [680, 300],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "google-sheets-cred", "name": "Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\"ok\": true}"
+      },
+      "id": "respond",
+      "name": "Basarili Yanit",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [900, 300]
     }
   ],
   "connections": {
-    "Webhook Deploy Log": { "main": [[{ "node": "Append to Sheets", "type": "main", "index": 0 }]] }
-  }
+    "Deploy Log Webhook": { "main": [[{ "node": "Token Dogrula", "type": "main", "index": 0 }]] },
+    "Token Dogrula": { "main": [[{ "node": "Sheets'e Ekle", "type": "main", "index": 0 }]] },
+    "Sheets'e Ekle": { "main": [[{ "node": "Basarili Yanit", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" }
 }

@@ -1,0 +1,32 @@
+name: Deploy WordPress Plugin via GitHub Pull
+
+on:
+  push:
+    branches:
+      - main
+      - claude/jolly-feynman-dt0epl
+    paths:
+      - 'wordpress-plugin/**'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger WordPress to pull latest plugin files
+        run: |
+          curl -s -X POST \
+            -H "Content-Type: application/json" \
+            -H "X-Dernek-Token: ${{ secrets.DERNEK_API_SECRET }}" \
+            -d "{\"branch\":\"${{ github.ref_name }}\"}" \
+            https://bitebimuv.org/wp-json/dernek/v1/github-deploy \
+            | tee /tmp/deploy-response.json
+
+          if grep -q '"success":true' /tmp/deploy-response.json; then
+            echo "Deploy successful!"
+            cat /tmp/deploy-response.json
+          else
+            echo "Deploy failed!"
+            cat /tmp/deploy-response.json
+            exit 1
+          fi

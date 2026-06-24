@@ -1,145 +1,234 @@
-# Apps Script Web App — API Dokümantasyonu
+# AI Takip Sistemi — API Dokumantasyonu
 
-Base URL: `https://script.google.com/macros/s/YOUR_SCRIPT_ID/exec`
+## Apps Script Web App
 
-Tüm isteklerde `token` alanı zorunludur. Bu değer Script Properties'deki `WEBHOOK_SECRET` ile eşleşmelidir.
+### Base URL
+
+```
+https://script.google.com/macros/s/{SCRIPT_ID}/exec
+```
+
+### Kimlik Dogrulama
+
+Tum istekler `token` parametresi veya `X-Dernek-Token` header'i gerektirir:
+
+```
+?token=your-secret-token
+```
+
+veya POST body'sinde:
+
+```json
+{ "token": "your-secret-token" }
+```
 
 ---
 
-## POST /exec — Konuşma Kaydı
+## POST /exec — Konusma Logu
 
-AI aracıyla yapılan bir konuşmayı Google Sheets'e kaydeder ve Drive'a dosya oluşturur.
+### Istek
 
-**Request Headers:**
 ```
+POST https://script.google.com/macros/s/{SCRIPT_ID}/exec
 Content-Type: application/json
 ```
 
-**Request Body:**
-```json
-{
-  "token": "your-secret-token",
-  "type": "conversation",
-  "device": "chrome-extension",
-  "tool": "claude",
-  "project": "Website Yenileme",
-  "prompt_summary": "Kullanıcının gönderdiği mesajın özeti (max 500 karakter)",
-  "response_summary": "AI yanıtının özeti (max 1000 karakter)",
-  "tokens_used": 1250,
-  "full_content": "İsteğe bağlı tam içerik",
-  "url": "https://claude.ai/chat/abc123"
-}
-```
+**Govde alanlari:**
 
-**Alan Açıklamaları:**
-
-| Alan | Tip | Zorunlu | Açıklama |
+| Alan | Tur | Zorunlu | Aciklama |
 |------|-----|---------|----------|
-| token | string | Evet | Kimlik doğrulama tokeni |
-| type | string | Evet | `"conversation"` olmalı |
-| device | string | Hayır | Kayıt cihazı (örn. `chrome-extension`, `mac-proxy`, `ios-shortcut`) |
-| tool | string | Hayır | AI aracı adı (`claude`, `gemini`, `perplexity`) |
-| project | string | Hayır | Proje adı, yoksa `"Genel"` kullanılır |
-| prompt_summary | string | Hayır | Prompt özeti |
-| response_summary | string | Hayır | Yanıt özeti |
-| tokens_used | number | Hayır | Kullanılan token sayısı |
-| full_content | string | Hayır | Tam konuşma içeriği (Drive dosyasına yazılır) |
-| url | string | Hayır | Konuşmanın URL'si |
+| `token` | string | Evet | Webhook secret token |
+| `type` | string | Evet | `"conversation"` |
+| `device` | string | Hayir | Ornegin: `"chrome-Win32"`, `"iphone"`, `"mac-proxy"` |
+| `tool` | string | Hayir | `"claude"`, `"gemini"`, `"perplexity"` |
+| `project` | string | Hayir | Proje adi (varsayilan: `"Genel"`) |
+| `prompt_summary` | string | Hayir | Kullanici promptunun ozeti (maks 500 karakter) |
+| `response_summary` | string | Hayir | AI yanitinin ozeti (maks 1000 karakter) |
+| `tokens_used` | number | Hayir | Kullanilan token sayisi |
+| `full_content` | string | Hayir | Tam icerik (Drive'a kaydedilir) |
 
-**Başarılı Yanıt (200):**
-```json
-{
-  "success": true
-}
+**Ornek curl:**
+
+```bash
+curl -X POST "https://script.google.com/macros/s/SCRIPT_ID/exec" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "token": "your-secret-token",
+    "type": "conversation",
+    "device": "mac-proxy",
+    "tool": "claude",
+    "project": "Website Yenileme",
+    "prompt_summary": "Ana sayfa tasarimini nasil iyilestirebilirim?",
+    "response_summary": "Hero section, CTA butonlari ve renk paleti onerileri...",
+    "tokens_used": 1250
+  }'
 ```
 
-**Hata Yanıtı:**
+**Basarili yanit:**
+
+```json
+{ "status": "ok", "message": "Logged" }
+```
+
+---
+
+## POST /exec — Deploy Logu
+
+### Istek
+
+**Govde alanlari:**
+
+| Alan | Tur | Zorunlu | Aciklama |
+|------|-----|---------|----------|
+| `token` | string | Evet | Webhook secret token |
+| `type` | string | Evet | `"deploy"` |
+| `domain` | string | Hayir | Alan adi (ornegin: `"bitebimuv.org"`) |
+| `action` | string | Hayir | Islem tipi (ornegin: `"deploy"`, `"rollback"`) |
+| `tool` | string | Hayir | Kullanilan arac (`"gcp"`, `"vercel"`, vs.) |
+| `status` | string | Hayir | `"success"`, `"failed"`, `"triggered"` |
+| `url` | string | Hayir | Deploy edilen URL |
+| `notes` | string | Hayir | Ek notlar |
+
+**Ornek curl:**
+
+```bash
+curl -X POST "https://script.google.com/macros/s/SCRIPT_ID/exec" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "token": "your-secret-token",
+    "type": "deploy",
+    "domain": "bitebimuv.org",
+    "action": "deploy",
+    "tool": "gcp",
+    "status": "success",
+    "url": "https://bitebimuv.org",
+    "notes": "v1.2.3 — Yeni AI sayfasi eklendi"
+  }'
+```
+
+---
+
+## GET /exec — Proje Listesi
+
+### Istek
+
+```
+GET https://script.google.com/macros/s/{SCRIPT_ID}/exec?token=SECRET&action=projects
+```
+
+**Yanit:**
+
+```json
+["Website Yenileme", "Blog Icerik Uretimi", "API Entegrasyonu"]
+```
+
+---
+
+## WordPress REST API
+
+### Base URL
+
+```
+https://bitebimuv.org/wp-json/dernek/v1
+```
+
+### Kimlik Dogrulama
+
+Header ile:
+
+```
+X-Dernek-Token: your-secret-token
+```
+
+veya query parametresi ile:
+
+```
+?token=your-secret-token
+```
+
+---
+
+### POST /wp-json/dernek/v1/log
+
+Konusma logu ekler veya mevcut proje kaydini gunceller.
+
+**Govde alanlari:** `token`, `project`, `tool`, `device`, `tokens_used`, `drive_link`
+
+**Ornek:**
+
+```bash
+curl -X POST "https://bitebimuv.org/wp-json/dernek/v1/log" \
+  -H "Content-Type: application/json" \
+  -H "X-Dernek-Token: your-secret-token" \
+  -d '{
+    "project": "Website Yenileme",
+    "tool": "claude",
+    "device": "chrome",
+    "tokens_used": 850
+  }'
+```
+
+**Yanit:**
+
 ```json
 {
-  "error": "Unauthorized"
+  "success": true,
+  "post_id": 42,
+  "tokens": 850,
+  "url": "https://bitebimuv.org/ai-projeler/website-yenileme/"
 }
 ```
 
 ---
 
-## POST /exec — Deploy Kaydı
+### GET /wp-json/dernek/v1/projects
 
-Bir hosting veya deploy işlemini Sheets'e kaydeder.
+Tum AI projelerini listeler. Kimlik dogrulama gerekmez.
 
-**Request Body:**
-```json
-{
-  "token": "your-secret-token",
-  "type": "deploy",
-  "domain": "bitebimuv.org",
-  "action": "GitHub Push Deploy",
-  "tool": "github",
-  "status": "Triggered",
-  "url": "https://github.com/kullanici/repo",
-  "notes": "main branch'e push — otomatik deploy tetiklendi"
-}
-```
+**Opsiyonel parametre:** `?tool=claude`
 
-**Alan Açıklamaları:**
+**Yanit:**
 
-| Alan | Tip | Zorunlu | Açıklama |
-|------|-----|---------|----------|
-| token | string | Evet | Kimlik doğrulama tokeni |
-| type | string | Evet | `"deploy"` olmalı |
-| domain | string | Hayır | Etkilenen alan adı |
-| action | string | Hayır | Yapılan işlem açıklaması |
-| tool | string | Hayır | Kullanılan araç (örn. `github`, `vercel`, `gcp`) |
-| status | string | Hayır | İşlem durumu (örn. `Triggered`, `Success`, `Failed`) |
-| url | string | Hayır | İlgili URL |
-| notes | string | Hayır | Ek notlar |
-
-**Başarılı Yanıt (200):**
-```json
-{
-  "success": true
-}
-```
-
----
-
-## GET /exec?action=projects — Proje Listesi
-
-Mevcut proje adlarının listesini döner. Chrome Extension popup'ında proje seçimi için kullanılır.
-
-**Request:**
-```
-GET https://script.google.com/macros/s/YOUR_SCRIPT_ID/exec?token=your-secret-token&action=projects
-```
-
-**Query Parametreleri:**
-
-| Parametre | Zorunlu | Açıklama |
-|-----------|---------|----------|
-| token | Evet | Kimlik doğrulama tokeni |
-| action | Evet | `"projects"` olmalı |
-
-**Başarılı Yanıt (200):**
 ```json
 [
-  "Website Yenileme",
-  "Blog Yazıları",
-  "E-ticaret Modülü",
-  "Genel"
+  {
+    "id": 42,
+    "title": "Website Yenileme",
+    "tool": "claude",
+    "device": "chrome",
+    "stage": "Devam Ediyor",
+    "tokens": 12500,
+    "cost_usd": 0.1875,
+    "drive_link": "https://drive.google.com/...",
+    "url": "https://bitebimuv.org/ai-projeler/website-yenileme/"
+  }
 ]
 ```
 
-**Hata Yanıtı:**
-```json
-{
-  "error": "Unauthorized"
-}
-```
+---
+
+### POST /wp-json/dernek/v1/deploy
+
+Deploy logu ekler.
+
+**Govde alanlari:** `token`, `domain`, `action`, `tool`, `url`, `notes`
 
 ---
 
-## Notlar
+## Hata Yanitleri
 
-- Tüm POST istekleri `Content-Type: application/json` header'ı ile gönderilmelidir.
-- Token doğrulama başarısız olursa HTTP 200 ile `{"error": "Unauthorized"}` döner (Apps Script kısıtlaması).
-- Rate limit: Apps Script'in günlük kota limitleri geçerlıdır (6 dakika/gün execution süresi, ücretsiz hesapta).
-- Yeni bir deployment yapıldığında URL değişir; tüm istemcilerde URL'yi güncellemeyi unutmayın.
+| HTTP Kodu | Anlami |
+|-----------|--------|
+| `400` | Eksik veya gecersiz veri |
+| `401` | Kimlik dogrulama hatasi — token yanlis veya eksik |
+| `500` | Sunucu hatasi — Apps Script veya WordPress tarafinda hata |
+
+**Ornek hata yaniti (WordPress):**
+
+```json
+{
+  "code": "no_data",
+  "message": "Veri yok",
+  "data": { "status": 400 }
+}
+```

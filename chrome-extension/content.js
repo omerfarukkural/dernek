@@ -1,62 +1,66 @@
 (function() {
   'use strict';
+
   var TOOL_MAP = {
     'claude.ai': 'claude',
     'gemini.google.com': 'gemini',
     'perplexity.ai': 'perplexity'
   };
-  var currentTool = null;
+
+  var toolName = null;
   Object.keys(TOOL_MAP).forEach(function(k) {
-    if (location.hostname.indexOf(k) !== -1) currentTool = k;
+    if (location.hostname.indexOf(k) !== -1) toolName = TOOL_MAP[k];
   });
-  if (!currentTool) return;
-  var toolName = TOOL_MAP[currentTool];
+  if (!toolName) return;
+
+  var lastLoggedAt = 0;
+  var MIN_INTERVAL_MS = 5000;
 
   function extractConversation() {
-    var promptText = '';
-    var responseText = '';
+    var prompt = '';
+    var response = '';
     if (toolName === 'claude') {
-      var userMsgs = document.querySelectorAll('[data-testid="human-turn-content"]');
-      var aiMsgs = document.querySelectorAll('[data-testid="assistant-turn-content"]');
-      if (userMsgs.length) promptText = userMsgs[userMsgs.length - 1].innerText.trim().substring(0, 500);
-      if (aiMsgs.length) responseText = aiMsgs[aiMsgs.length - 1].innerText.trim().substring(0, 1000);
+      var um = document.querySelectorAll('[data-testid="human-turn-content"]');
+      var am = document.querySelectorAll('[data-testid="assistant-turn-content"]');
+      if (um.length) prompt = um[um.length - 1].innerText.trim().substring(0, 500);
+      if (am.length) response = am[am.length - 1].innerText.trim().substring(0, 1000);
     } else if (toolName === 'gemini') {
-      var queries = document.querySelectorAll('.query-text');
-      var responses = document.querySelectorAll('.response-container');
-      if (queries.length) promptText = queries[queries.length - 1].innerText.trim().substring(0, 500);
-      if (responses.length) responseText = responses[responses.length - 1].innerText.trim().substring(0, 1000);
+      var qs = document.querySelectorAll('.query-text, [data-turn-role="user"] p');
+      var rs = document.querySelectorAll('.response-container, model-response');
+      if (qs.length) prompt = qs[qs.length - 1].innerText.trim().substring(0, 500);
+      if (rs.length) response = rs[rs.length - 1].innerText.trim().substring(0, 1000);
     } else if (toolName === 'perplexity') {
-      var paras = document.querySelectorAll('.prose p');
-      if (paras.length) responseText = paras[0].innerText.trim().substring(0, 1000);
+      var ps = document.querySelectorAll('.break-words');
+      if (ps.length > 0) response = ps[0].innerText.trim().substring(0, 1000);
+      var hs = document.querySelectorAll('h1, [class*="query"]');
+      if (hs.length) prompt = hs[0].innerText.trim().substring(0, 500);
     }
-    return { promptText: promptText, responseText: responseText };
+    return { prompt: prompt, response: response };
   }
 
-  function sendToBackground(project, prompt, response) {
+  function maybeSendLog(project) {
+    var now = Date.now();
+    if (now - lastLoggedAt < MIN_INTERVAL_MS) return;
+    var ex = extractConversation();
+    if (!ex.prompt && !ex.response) return;
+    lastLoggedAt = now;
     chrome.runtime.sendMessage({
       action: 'log_conversation',
       tool: toolName,
       project: project,
-      prompt_summary: prompt,
-      response_summary: response,
+      prompt_summary: ex.prompt,
+      response_summary: ex.response,
       url: location.href
     });
   }
 
-  var lastLogged = false;
   var observer = new MutationObserver(function() {
-    var stopBtns = document.querySelectorAll('[aria-label="Stop"]');
-    if (stopBtns.length === 0 && !lastLogged) {
-      lastLogged = true;
+    var stopBtns = document.querySelectorAll('[aria-label="Stop"], button[data-testid="stop-button"], .stop-button');
+    if (stopBtns.length === 0) {
       setTimeout(function() {
-        chrome.storage.sync.get(['currentProject'], function(result) {
-          var project = result.currentProject || 'Genel';
-          var extracted = extractConversation();
-          if (extracted.promptText || extracted.responseText) {
-            sendToBackground(project, extracted.promptText, extracted.responseText);
-          }
+        chrome.storage.sync.get(['currentProject'], function(r) {
+          maybeSendLog(r.currentProject || 'Genel');
         });
-        lastLogged = false;
       }, 3000);
     }
   });
@@ -64,8 +68,8 @@
 
   chrome.runtime.onMessage.addListener(function(msg) {
     if (msg.action === 'manual_log') {
-      var extracted = extractConversation();
-      sendToBackground(msg.project, extracted.promptText, extracted.responseText);
+      lastLoggedAt = 0;
+      maybeSendLog(msg.project || 'Genel');
     }
   });
 })();

@@ -1,0 +1,87 @@
+name: Bootstrap Plugin via FTP
+
+on:
+  workflow_dispatch:
+
+jobs:
+  ftp-upload:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Upload plugin files via cPanel API Token
+        env:
+          CPANEL_USER: ${{ secrets.CPANEL_USER }}
+          CPANEL_TOKEN: ${{ secrets.CPANEL_TOKEN }}
+        run: |
+          python3 << 'EOF'
+          import os, requests, sys
+          requests.packages.urllib3.disable_warnings()
+
+          host  = "srvc03.trwww.com"
+          user  = os.environ["CPANEL_USER"]
+          token = os.environ["CPANEL_TOKEN"]
+          base  = "/public_html/wp-content/plugins/dernek-project-sync"
+
+          headers = {"Authorization": f"cpanel {user}:{token}"}
+
+          def mkdirp(parent, name):
+              resp = requests.post(
+                  f"https://{host}:2083/json-api/cpanel",
+                  headers=headers,
+                  data={
+                      "cpanel_jsonapi_module": "Fileman",
+                      "cpanel_jsonapi_func": "mkdir2",
+                      "cpanel_jsonapi_apiversion": "2",
+                      "dir": parent,
+                      "name": name,
+                  },
+                  verify=False, timeout=30,
+              )
+              j = resp.json()
+              result = j.get("cpanelresult", {})
+              data = result.get("data", [{}])
+              if data and data[0].get("result", {}).get("status") == 1:
+                  print(f"📁 created {parent}/{name}")
+              else:
+                  print(f"  mkdirp {name}: {result.get('error', data)} (may already exist)")
+
+          plugins_dir = "/public_html/wp-content/plugins"
+          mkdirp(plugins_dir, "dernek-project-sync")
+          mkdirp(base, "includes")
+          mkdirp(base, "public")
+
+          files = [
+              ("wordpress-plugin/dernek-project-sync.php",                      base),
+              ("wordpress-plugin/includes/class-rest-api.php",                  base + "/includes"),
+              ("wordpress-plugin/includes/class-post-type.php",                 base + "/includes"),
+              ("wordpress-plugin/includes/class-admin-widget.php",              base + "/includes"),
+              ("wordpress-plugin/includes/class-social-scheduler.php",          base + "/includes"),
+              ("wordpress-plugin/includes/class-content-pipeline.php",          base + "/includes"),
+              ("wordpress-plugin/includes/class-notebooklm-bridge.php",         base + "/includes"),
+              ("wordpress-plugin/public/shortcode.php",                         base + "/public"),
+          ]
+
+          ok = True
+          for src, dest_dir in files:
+              filename = os.path.basename(src)
+              with open(src, "r", encoding="utf-8") as f:
+                  content = f.read()
+
+              resp = requests.post(
+                  f"https://{host}:2083/execute/Fileman/save_file_content",
+                  headers=headers,
+                  data={"dir": dest_dir, "file": filename, "content": content},
+                  verify=False,
+                  timeout=60,
+              )
+              j = resp.json()
+              if j.get("status") == 1:
+                  print(f"✓ {filename}")
+              else:
+                  print(f"✗ FAILED {filename}: {j}")
+                  ok = False
+
+          sys.exit(0 if ok else 1)
+          EOF
