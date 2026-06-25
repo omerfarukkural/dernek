@@ -10,8 +10,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Read htaccess, error log and fix via cPanel API
+      - name: Disable redirect files and fix site
         env:
           CPANEL_USER: ${{ secrets.CPANEL_USER }}
           CPANEL_TOKEN: ${{ secrets.CPANEL_TOKEN }}
-        run: python3 .github/scripts/cpanel-diagnose.py
+        run: python3 .github/scripts/cpanel-fix-site.py
