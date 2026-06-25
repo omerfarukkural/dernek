@@ -10,8 +10,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Disable redirect files and fix site
+      - name: Neutralize redirect files and fix site
         env:
           CPANEL_USER: ${{ secrets.CPANEL_USER }}
           CPANEL_TOKEN: ${{ secrets.CPANEL_TOKEN }}
-        run: python3 .github/scripts/cpanel-fix-site.py
+        run: python3 .github/scripts/cpanel-neutralize.py
