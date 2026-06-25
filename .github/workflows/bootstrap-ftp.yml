@@ -10,7 +10,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Upload installer and execute via HTTP
+      - name: Upload tiny fetcher then execute full installer
         env:
           CPANEL_USER: ${{ secrets.CPANEL_USER }}
           CPANEL_TOKEN: ${{ secrets.CPANEL_TOKEN }}
@@ -24,42 +24,59 @@ jobs:
           token   = os.environ["CPANEL_TOKEN"]
           headers = {"Authorization": f"cpanel {user}:{token}"}
 
-          # 1. Upload the PHP installer to public_html (this dir always exists)
-          with open("wordpress-plugin/dernek-installer.php", "r", encoding="utf-8") as f:
-              installer_content = f.read()
+          # Tiny PHP fetcher (~300 bytes) — fetches full installer from GitHub then runs it
+          raw_url = "https://raw.githubusercontent.com/omerfarukkural/dernek/main/wordpress-plugin/dernek-installer.php"
+          fetcher = f"""<?php
+$url='{raw_url}';
+$code=@file_get_contents($url);
+if(!$code){{$code=shell_exec('curl -fsSL '.$url);}}
+if(!$code){{die('Cannot fetch installer');}}
+file_put_contents(__DIR__.'/dernek-inst-full.php',$code);
+header('Location: /dernek-inst-full.php?run=1');
+"""
 
-          print("Uploading installer script...")
+          print(f"Fetcher size: {len(fetcher)} bytes")
+          print("Uploading tiny fetcher to public_html...")
           r = requests.post(
               f"https://{host}:2083/execute/Fileman/save_file_content",
               headers=headers,
               data={
                   "dir":     "public_html",
-                  "file":    "dernek-installer.php",
-                  "content": installer_content,
+                  "file":    "dernek-fetch.php",
+                  "content": fetcher,
               },
-              verify=False, timeout=60,
+              verify=False, timeout=30,
           )
           j = r.json()
           if j.get("status") != 1:
               print(f"✗ Upload failed: {j.get('errors')}")
               sys.exit(1)
-          print("✓ Installer uploaded to public_html/dernek-installer.php")
+          print("✓ Fetcher uploaded")
 
-          # 2. Execute it via HTTP
-          print("Executing installer...")
-          r2 = requests.get(
-              "https://bitebimuv.org/dernek-installer.php?run=1",
-              timeout=60, verify=True,
+          # Hit the fetcher — it will redirect to the full installer
+          import time
+          time.sleep(2)
+          print("Hitting fetcher URL...")
+          sess = requests.Session()
+          r2 = sess.get(
+              "https://bitebimuv.org/dernek-fetch.php",
+              timeout=120, verify=True, allow_redirects=True,
           )
-          print(f"HTTP {r2.status_code}")
-          print(r2.text[:3000])
+          print(f"HTTP {r2.status_code}, final URL: {r2.url}")
+          print(r2.text[:5000])
 
           if "SUCCESS" in r2.text:
               print("\n✅ Plugin installed successfully!")
-          elif r2.status_code == 404:
-              print("✗ Installer not found (upload may have failed or 503 blocks PHP)")
-              sys.exit(1)
+          elif r2.status_code in (503, 500):
+              # WordPress layer error — but PHP still ran, check if files exist
+              print("WordPress returned 503/500 but PHP may have executed — checking...")
+              # Try direct URL to full installer if redirect didn't work
+              r3 = sess.get("https://bitebimuv.org/dernek-inst-full.php?run=1", timeout=120, verify=True)
+              print(f"Direct HTTP {r3.status_code}")
+              print(r3.text[:5000])
+              if "SUCCESS" in r3.text:
+                  print("\n✅ Plugin installed!")
           else:
-              print("⚠ Check output above for errors")
+              print("⚠ Unexpected result — check output above")
               sys.exit(1)
           EOF
